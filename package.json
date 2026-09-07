@@ -1,0 +1,22 @@
+{
+  "name": "hr-talent-analytics-dashboard",
+  "version": "1.0.0",
+  "description": "لوحة تحكم تفاعلية متطورة لتحليل وإدارة الكوادر والكفاءات المهنية",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "dashboard",
+    "hr",
+    "analytics",
+    "talents",
+    "pdf-parser",
+    "excel"
+  ],
+  "author": "mustaf",
+  "license": "MIT",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}
