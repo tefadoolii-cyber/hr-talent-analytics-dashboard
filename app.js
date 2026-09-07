@@ -32,8 +32,144 @@ const FIELD_NAMES = {
   license: "الرخص المهنية"
 };
 
+// ==========================================
+// نظام حماية الدخول بكلمة مرور لمنصة وِصال (Wisal HR Auth)
+// ==========================================
+const AUTH_KEY = 'wisal_hr_auth_status';
+const PASSWORD_STORAGE_KEY = 'wisal_hr_custom_password';
+const DEFAULT_PASSWORDS = ['wisal2026', '123456', 'admin'];
+
+function getMasterPassword() {
+  return localStorage.getItem(PASSWORD_STORAGE_KEY) || 'wisal2026';
+}
+
+function isAuthenticated() {
+  return sessionStorage.getItem(AUTH_KEY) === 'true' || localStorage.getItem(AUTH_KEY) === 'true';
+}
+
+function checkAuthStatus() {
+  const overlay = document.getElementById('loginOverlay');
+  if (!overlay) return;
+  if (isAuthenticated()) {
+    overlay.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+  } else {
+    overlay.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    setTimeout(() => {
+      document.getElementById('loginPasswordInput')?.focus();
+    }, 100);
+  }
+}
+
+function handleLoginSubmit(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('loginPasswordInput');
+  const errorMsg = document.getElementById('loginErrorMsg');
+  const rememberMe = document.getElementById('rememberMeCheckbox')?.checked;
+  const currentPassword = getMasterPassword();
+
+  const entered = (input?.value || '').trim();
+
+  if (entered === currentPassword || DEFAULT_PASSWORDS.includes(entered)) {
+    if (rememberMe) {
+      localStorage.setItem(AUTH_KEY, 'true');
+    }
+    sessionStorage.setItem(AUTH_KEY, 'true');
+
+    if (errorMsg) errorMsg.classList.add('hidden');
+    const overlay = document.getElementById('loginOverlay');
+    if (overlay) {
+      overlay.classList.add('animate-out', 'fade-out', 'duration-300');
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('animate-out', 'fade-out', 'duration-300');
+        document.body.classList.remove('overflow-hidden');
+      }, 250);
+    }
+  } else {
+    if (errorMsg) {
+      errorMsg.classList.remove('hidden');
+      if (input) {
+        input.classList.add('border-rose-500', 'bg-rose-50/30');
+        setTimeout(() => {
+          input.classList.remove('border-rose-500', 'bg-rose-50/30');
+        }, 2000);
+      }
+    }
+  }
+}
+
+function togglePasswordVisibility() {
+  const input = document.getElementById('loginPasswordInput');
+  const icon = document.getElementById('passwordToggleIcon');
+  if (!input || !icon) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    icon.classList.remove('fa-eye');
+    icon.classList.add('fa-eye-slash');
+  } else {
+    input.type = 'password';
+    icon.classList.remove('fa-eye-slash');
+    icon.classList.add('fa-eye');
+  }
+}
+
+function handleLogout() {
+  sessionStorage.removeItem(AUTH_KEY);
+  localStorage.removeItem(AUTH_KEY);
+  const input = document.getElementById('loginPasswordInput');
+  if (input) input.value = '';
+  checkAuthStatus();
+}
+
+function openChangePasswordModal() {
+  document.getElementById('changePasswordModal')?.classList.remove('hidden');
+}
+
+function closeChangePasswordModal() {
+  document.getElementById('changePasswordModal')?.classList.add('hidden');
+  const form = document.getElementById('changePasswordForm');
+  if (form) form.reset();
+}
+
+function handleChangePasswordSubmit(e) {
+  if (e) e.preventDefault();
+  const form = e.target;
+  const current = (form.currentPass?.value || '').trim();
+  const newPass = (form.newPass?.value || '').trim();
+  const confirmPass = (form.confirmPass?.value || '').trim();
+
+  const realPass = getMasterPassword();
+
+  if (current !== realPass && !DEFAULT_PASSWORDS.includes(current)) {
+    alert('كلمة المرور الحالية غير صحيحة!');
+    return;
+  }
+  if (!newPass || newPass.length < 4) {
+    alert('يجب أن تتكون كلمة المرور الجديدة من 4 أحرف أو أرقام على الأقل.');
+    return;
+  }
+  if (newPass !== confirmPass) {
+    alert('كلمة المرور الجديدة غير متطابقة مع التأكيد!');
+    return;
+  }
+
+  localStorage.setItem(PASSWORD_STORAGE_KEY, newPass);
+  alert('تم تغيير كلمة مرور منصة وِصال بنجاح!\nكلمة المرور الجديدة هي: ' + newPass);
+  closeChangePasswordModal();
+}
+
+window.handleLoginSubmit = handleLoginSubmit;
+window.togglePasswordVisibility = togglePasswordVisibility;
+window.handleLogout = handleLogout;
+window.openChangePasswordModal = openChangePasswordModal;
+window.closeChangePasswordModal = closeChangePasswordModal;
+window.handleChangePasswordSubmit = handleChangePasswordSubmit;
+
 // تهيئة التطبيق عند اكتمال تحميل الصفحة
 document.addEventListener('DOMContentLoaded', () => {
+  checkAuthStatus();
   initDashboard();
   setupEventListeners();
 });

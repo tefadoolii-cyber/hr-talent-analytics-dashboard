@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>لوحة تحكم الكوادر والخبرات المهنية | HR Analytics Dashboard</title>
+  <title>وِصال — Wisal HR | لوحة تحكم الكوادر والخبرات المهنية</title>
   
   <!-- خط Cairo الاحترافي -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -80,17 +80,17 @@
   <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-col sm:flex-row justify-between items-center gap-4">
       
-      <!-- شعار وعنوان الداشبورد -->
+      <!-- شعار وعنوان الداشبورد: وِصال — Wisal HR -->
       <div class="flex items-center gap-3.5">
         <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-purple-600 text-white flex items-center justify-center text-xl shadow-md shadow-indigo-100">
-          <i class="fa-solid fa-chart-pie"></i>
+          <i class="fa-solid fa-users-viewfinder"></i>
         </div>
         <div>
           <div class="flex items-center gap-2">
-            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">لوحة تحكم فرز الكوادر والخبرات</h1>
+            <h1 class="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">وِصال — Wisal HR</h1>
             <span class="bg-indigo-50 text-indigo-700 border border-indigo-200/80 text-[11px] font-bold px-2 py-0.5 rounded-full">1,197 كادر نشط</span>
           </div>
-          <p class="text-xs text-slate-500 font-medium mt-0.5">تحليل بيانات الفرز، المؤهلات العلمية، مجالات وسنوات الخبرة الثلاث، والرخص المهنية</p>
+          <p class="text-xs text-slate-500 font-medium mt-0.5">منصة وِصال الذكية لتحليل بيانات الكوادر، المؤهلات العلمية، مجالات الخبرة والرخص المهنية</p>
         </div>
       </div>
 
@@ -116,6 +116,15 @@
 
         <button onclick="window.print()" class="p-2 bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-sm transition" title="طباعة الداشبورد">
           <i class="fa-solid fa-print"></i>
+        </button>
+
+        <!-- زر تغيير كلمة المرور وقفل الداشبورد -->
+        <div class="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+        <button onclick="openChangePasswordModal()" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5" title="تغيير كلمة مرور الدخول">
+          <i class="fa-solid fa-key text-[11px]"></i> تغيير الرمز
+        </button>
+        <button onclick="handleLogout()" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5" title="قفل الداشبورد وتسجيل الخروج">
+          <i class="fa-solid fa-arrow-right-from-bracket text-[11px]"></i> خروج
         </button>
       </div>
 
@@ -788,9 +797,109 @@
     </div>
   </div>
 
+  <!-- نافذة تغيير كلمة المرور (Change Password Modal) -->
+  <div id="changePasswordModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all animate-in fade-in zoom-in duration-200">
+      
+      <div class="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/80">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-indigo-600"></span>
+          <h3 class="text-base font-bold text-slate-900">تغيير كلمة مرور الداشبورد</h3>
+        </div>
+        <button onclick="closeChangePasswordModal()" class="w-8 h-8 rounded-full bg-slate-200/80 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <form id="changePasswordForm" onsubmit="handleChangePasswordSubmit(event)" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الحالية *</label>
+          <input type="password" name="currentPass" required placeholder="أدخل كلمة المرور الحالية (الافتراضية: wisal2026)" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-600 focus:outline-none font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة *</label>
+          <input type="password" name="newPass" required placeholder="أدخل كلمة المرور الجديدة (4 خانات فأكثر)" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-600 focus:outline-none font-mono">
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">تأكيد كلمة المرور الجديدة *</label>
+          <input type="password" name="confirmPass" required placeholder="أعد إدخال كلمة المرور الجديدة" class="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-600 focus:outline-none font-mono">
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-end gap-2">
+          <button type="button" onclick="closeChangePasswordModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">
+            إلغاء
+          </button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition">
+            حفظ كلمة المرور الجديدة
+          </button>
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+  <!-- شاشة تسجيل الدخول وحماية المنصة بكلمة مرور (Wisal Login Screen) -->
+  <div id="loginOverlay" class="fixed inset-0 z-[100] bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-100 overflow-hidden transform transition-all p-7 sm:p-8 text-center animate-in fade-in zoom-in duration-300">
+      
+      <!-- الشعار والهوية -->
+      <div class="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-700 to-purple-600 text-white flex items-center justify-center text-2xl shadow-lg shadow-indigo-200">
+        <i class="fa-solid fa-users-viewfinder"></i>
+      </div>
+      
+      <h2 class="text-2xl font-black text-slate-900 mb-1 tracking-tight">وِصال — Wisal HR</h2>
+      <p class="text-xs text-slate-500 font-medium mb-5">منصة تحليل وإدارة الكوادر والكفاءات المهنية</p>
+      
+      <div class="bg-indigo-50/70 border border-indigo-100 rounded-2xl p-3.5 mb-5 text-right flex items-center gap-3">
+        <div class="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 text-sm shadow-xs">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <div>
+          <p class="text-xs font-bold text-indigo-900">المنصة محمية بكلمة مرور</p>
+          <p class="text-[11px] text-indigo-700/80 font-medium">يرجى إدخال كلمة المرور للوصول إلى لوحة التحكم</p>
+        </div>
+      </div>
+
+      <!-- نموذج الدخول -->
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div class="relative text-right">
+          <label class="block text-xs font-bold text-slate-700 mb-1.5">كلمة المرور</label>
+          <div class="relative">
+            <input type="password" id="loginPasswordInput" required placeholder="أدخل كلمة المرور..." 
+              class="w-full pl-10 pr-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-600 focus:outline-none transition font-mono">
+            <button type="button" onclick="togglePasswordVisibility()" class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+              <i id="passwordToggleIcon" class="fa-solid fa-eye text-sm"></i>
+            </button>
+          </div>
+          <p id="loginErrorMsg" class="hidden text-xs font-bold text-rose-600 mt-1.5 flex items-center gap-1">
+            <i class="fa-solid fa-circle-exclamation"></i> كلمة المرور غير صحيحة، يرجى المحاولة مجدداً.
+          </p>
+        </div>
+
+        <div class="flex items-center justify-between text-xs text-slate-600 pt-1">
+          <label class="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" id="rememberMeCheckbox" checked class="rounded text-indigo-600 focus:ring-indigo-500 border-slate-300">
+            <span>تذكر تسجيل الدخول</span>
+          </label>
+          <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-mono" title="كلمة المرور الافتراضية">
+            الرمز الافتراضي: <strong>wisal2026</strong>
+          </span>
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-200 transition flex items-center justify-center gap-2">
+          <i class="fa-solid fa-right-to-bracket"></i> الدخول إلى الداشبورد
+        </button>
+      </form>
+
+      <p class="text-[11px] text-slate-400 mt-5">جميع الحقوق محفوظة © منصة وِصال — Wisal HR 2026</p>
+    </div>
+  </div>
+
   <!-- تذييل الصفحة -->
   <footer class="mt-12 py-6 border-t border-slate-200 text-center text-xs text-slate-400 no-print">
-    <p>لوحة تحكم الكوادر والخبرات المهنية &bull; متوافقة تماماً مع معطيات وقوالب Excel &bull; 2026</p>
+    <p>منصة وِصال — Wisal HR &bull; لوحة تحكم الكوادر والخبرات المهنية &bull; 2026</p>
   </footer>
 
   <!-- ملفات الجافاسكربت -->

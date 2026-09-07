@@ -1,12 +1,13 @@
 {
-  "name": "hr-talent-analytics-dashboard",
+  "name": "wisal-hr-analytics-dashboard",
   "version": "1.0.0",
-  "description": "لوحة تحكم تفاعلية متطورة لتحليل وإدارة الكوادر والكفاءات المهنية",
+  "description": "منصة وِصال — Wisal HR لتحليل وإدارة الكوادر والكفاءات المهنية",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "keywords": [
+    "wisal-hr",
     "dashboard",
     "hr",
     "analytics",
