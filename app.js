@@ -167,14 +167,99 @@ window.openChangePasswordModal = openChangePasswordModal;
 window.closeChangePasswordModal = closeChangePasswordModal;
 window.handleChangePasswordSubmit = handleChangePasswordSubmit;
 
+// ==========================================
+// طبقة التخزين الدائم للبيانات في المتصفح (IndexedDB Persistent Storage)
+// ==========================================
+const DB_NAME = 'WisalHR_Database';
+const DB_VERSION = 1;
+const STORE_NAME = 'talents_store';
+const STORAGE_KEY = 'wisal_active_talents';
+
+function openDB() {
+  return new Promise((resolve) => {
+    if (!window.indexedDB) {
+      resolve(null);
+      return;
+    }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => {
+      console.warn('IndexedDB open error:', e);
+      resolve(null);
+    };
+  });
+}
+
+async function saveTalentDataToStorage(data) {
+  try {
+    const db = await openDB();
+    if (db) {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      store.put(data, STORAGE_KEY);
+      await new Promise((resolve) => {
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      });
+    }
+  } catch (err) {
+    console.warn('Error saving to IndexedDB:', err);
+  }
+}
+
+async function loadTalentDataFromStorage() {
+  try {
+    const db = await openDB();
+    if (db) {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(STORAGE_KEY);
+      const result = await new Promise((resolve) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      });
+      if (result && Array.isArray(result) && result.length > 0) {
+        return result;
+      }
+    }
+  } catch (err) {
+    console.warn('Error loading from IndexedDB:', err);
+  }
+  return null;
+}
+
+async function resetToFactoryData() {
+  if (confirm('هل أنت متأكد من استعادة بيانات النظام الأصلية؟\nسيتم حذف التعديلات والملفات المستوردة والعودة لقاعدة البيانات الأولية (1,197 كادر).')) {
+    talentData = [...INITIAL_TALENT_DATA];
+    await saveTalentDataToStorage(talentData);
+    filteredData = [...talentData];
+    currentPage = 1;
+    populateFilterDropdowns();
+    applyFilters();
+    alert('تمت استعادة البيانات الأولية بنجاح!');
+  }
+}
+window.resetToFactoryData = resetToFactoryData;
+
 // تهيئة التطبيق عند اكتمال تحميل الصفحة
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   checkAuthStatus();
-  initDashboard();
+  await initDashboard();
   setupEventListeners();
 });
 
-function initDashboard() {
+async function initDashboard() {
+  const savedData = await loadTalentDataFromStorage();
+  if (savedData && Array.isArray(savedData) && savedData.length > 0) {
+    talentData = savedData;
+    filteredData = [...talentData];
+  }
   populateFilterDropdowns();
   applyFilters();
   initCharts();
@@ -385,6 +470,11 @@ function resetFilters() {
 function updateKPIs() {
   const total = filteredData.length;
   document.getElementById('kpiTotal').textContent = total.toLocaleString('ar-SA');
+  
+  const headerActiveCountBadge = document.getElementById('headerActiveCountBadge');
+  if (headerActiveCountBadge) {
+    headerActiveCountBadge.textContent = `${talentData.length.toLocaleString('ar-SA')} كادر نشط`;
+  }
 
   if (total === 0) {
     document.getElementById('kpiAvgExp').textContent = '0 سنة';
@@ -971,7 +1061,7 @@ function handleFileUpload(file) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     try {
       const data = new Uint8Array(e.target.result);
       const workbook = XLSX.read(data, { type: 'array' });
@@ -1148,9 +1238,12 @@ function handleFileUpload(file) {
         }
       });
 
+      // حفظ في التخزين الدائم (IndexedDB) حتى لا تختفي عند تحديث الصفحة
+      await saveTalentDataToStorage(talentData);
+
       populateFilterDropdowns();
       applyFilters();
-      alert(`تم استيراد الملف بنجاح مع الحفاظ الكامل على البيانات السابقة!\n\n• تم إضافة: ${addedCount.toLocaleString('ar-SA')} كادر جديد\n• تم تحديث: ${updatedCount.toLocaleString('ar-SA')} كادر مسبق\n• إجمالي الكوادر في الداشبورد الآن: ${talentData.length.toLocaleString('ar-SA')} كادر.`);
+      alert(`تم استيراد الملف بنجاح وحفظه دائماً في قاعدة بيانات المتصفح!\n\n• تم إضافة: ${addedCount.toLocaleString('ar-SA')} كادر جديد\n• تم تحديث: ${updatedCount.toLocaleString('ar-SA')} كادر مسبق\n• إجمالي الكوادر في الداشبورد الآن: ${talentData.length.toLocaleString('ar-SA')} كادر.\n(تم الحفظ تلقائياً ولن تفقد البيانات عند التحديث أو إعادة فتح المتصفح).`);
     } catch (err) {
       console.error(err);
       alert('حدث خطأ أثناء قراءة ملف الإكسيل.');
@@ -1242,6 +1335,7 @@ function handleAddCandidateSubmit(e) {
     talentData.unshift(newRecord);
     alert(`تمت إضافة الكادر المهني برقم الهوية: ${idNum} بنجاح مع الحفاظ على كافة السجلات السابقة!`);
   }
+  saveTalentDataToStorage(talentData);
   closeAddModal();
   populateFilterDropdowns();
   applyFilters();
@@ -1375,6 +1469,7 @@ function handlePdfReviewSubmit(e) {
     talentData.unshift(newRecord);
     alert(`تم بنجاح استخراج واعتماد الكادر برقم الهوية (${idNum}) وإضافته إلى الداشبورد مع الحفاظ على كافة السجلات السابقة! 🎉`);
   }
+  saveTalentDataToStorage(talentData);
   closePdfReviewModal();
   populateFilterDropdowns();
   applyFilters();
