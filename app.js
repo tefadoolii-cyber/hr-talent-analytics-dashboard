@@ -224,7 +224,7 @@ async function loadTalentDataFromStorage() {
         req.onsuccess = () => resolve(req.result);
         req.onerror = () => resolve(null);
       });
-      if (result && Array.isArray(result) && result.length > 0) {
+      if (result !== undefined && result !== null && Array.isArray(result)) {
         return result;
       }
     }
@@ -233,6 +233,48 @@ async function loadTalentDataFromStorage() {
   }
   return null;
 }
+
+// حذف وتفريغ كافة البيانات من الداشبورد
+async function clearAllData() {
+  if (talentData.length === 0) {
+    alert('الداشبورد فارغ بالفعل، لا توجد بيانات لحذفها!');
+    return;
+  }
+
+  const isConfirmed = confirm(
+    `⚠️ تحذير هام:\n\nهل أنت متأكد تماماً من رغبتك في حذف وتفريغ كافة البيانات (${talentData.length.toLocaleString('ar-SA')} كادر) من الداشبورد؟\n\n` +
+    '• سيتم مسح جميع السجلات الحالية نهائياً.\n' +
+    '• سيبقى الداشبورد فارغاً حتى بعد تحديث الصفحة.\n' +
+    '• سيمكنك رفع ملفاتك وسيرك الذاتية الخاصة من الصفر.\n' +
+    '• (ملاحظة: يمكنك دائماً استرجاع البيانات الأولية في أي وقت بالضغط على زر "استعادة الأصل").'
+  );
+
+  if (!isConfirmed) return;
+
+  talentData = [];
+  await saveTalentDataToStorage(talentData);
+  filteredData = [];
+  currentPage = 1;
+  populateFilterDropdowns();
+  applyFilters();
+  alert('تم حذف وتفريغ كافة البيانات بنجاح! الداشبورد أصبح فارغاً وجاهزاً لاستقبال ملفاتك وبياناتك الجديدة.');
+}
+window.clearAllData = clearAllData;
+
+// حذف كادر مهني فردي
+async function deleteCandidate(id) {
+  const item = talentData.find(d => String(d.id) === String(id) || String(d[FIELD_NAMES.id]) === String(id));
+  const idDisplay = item ? (item[FIELD_NAMES.id] || id) : id;
+
+  if (confirm(`هل أنت متأكد من رغبتك في حذف الكادر برقم الهوية: (${idDisplay})؟`)) {
+    talentData = talentData.filter(d => String(d.id) !== String(id) && String(d[FIELD_NAMES.id]) !== String(id));
+    await saveTalentDataToStorage(talentData);
+    populateFilterDropdowns();
+    applyFilters();
+    closeProfileModal();
+  }
+}
+window.deleteCandidate = deleteCandidate;
 
 async function resetToFactoryData() {
   if (confirm('هل أنت متأكد من استعادة بيانات النظام الأصلية؟\nسيتم حذف التعديلات والملفات المستوردة والعودة لقاعدة البيانات الأولية (1,197 كادر).')) {
@@ -256,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initDashboard() {
   const savedData = await loadTalentDataFromStorage();
-  if (savedData && Array.isArray(savedData) && savedData.length > 0) {
+  if (savedData !== null && Array.isArray(savedData)) {
     talentData = savedData;
     filteredData = [...talentData];
   }
@@ -720,6 +762,37 @@ function renderTable() {
   if (filteredData.length === 0) {
     tbody.innerHTML = '';
     emptyState.classList.remove('hidden');
+    const emptyTitle = document.getElementById('emptyStateTitle');
+    const emptyDesc = document.getElementById('emptyStateDesc');
+    const emptyActions = document.getElementById('emptyStateActions');
+
+    if (talentData.length === 0) {
+      if (emptyTitle) emptyTitle.textContent = 'قاعدة البيانات فارغة تماماً';
+      if (emptyDesc) emptyDesc.textContent = 'تم تفريغ كافة السجلات بنجاح. يمكنك استيراد ملف إكسيل أو رفع سيرة ذاتية PDF للبدء، أو استرجاع البيانات الأصلية.';
+      if (emptyActions) {
+        emptyActions.innerHTML = `
+          <button onclick="document.getElementById('excelFileInput').click()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-xs">
+            <i class="fa-solid fa-cloud-arrow-up"></i> استيراد ملف إكسيل
+          </button>
+          <button onclick="triggerPdfUpload()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-xs">
+            <i class="fa-solid fa-file-pdf"></i> قراءة ملف PDF
+          </button>
+          <button onclick="resetToFactoryData()" class="px-4 py-2 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-700 text-xs font-bold rounded-xl transition inline-flex items-center gap-2 border border-slate-200">
+            <i class="fa-solid fa-rotate-left"></i> استعادة الأصل (1,197 كادر)
+          </button>
+        `;
+      }
+    } else {
+      if (emptyTitle) emptyTitle.textContent = 'لا توجد بيانات مطابقة لخيارات التصفية';
+      if (emptyDesc) emptyDesc.textContent = 'جرب تغيير كلمات البحث أو إعادة ضبط الفلاتر للاطلاع على السجلات.';
+      if (emptyActions) {
+        emptyActions.innerHTML = `
+          <button onclick="resetFilters()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition">
+            إعادة ضبط الفلاتر
+          </button>
+        `;
+      }
+    }
     renderPagination();
     return;
   }
@@ -764,9 +837,14 @@ function renderTable() {
         </td>
         <td class="px-4 py-3 text-xs">${licenseBadge}</td>
         <td class="px-4 py-3 text-center whitespace-nowrap">
-          <button onclick="viewProfile(${actualIdx})" class="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1 shadow-xs">
-            <i class="fa-regular fa-id-card"></i> الملف الكامل
-          </button>
+          <div class="inline-flex items-center gap-1.5">
+            <button onclick="viewProfile(${actualIdx})" class="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1 shadow-xs">
+              <i class="fa-regular fa-id-card"></i> الملف الكامل
+            </button>
+            <button onclick="deleteCandidate('${row.id || row[FIELD_NAMES.id]}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="حذف هذا الكادر">
+              <i class="fa-solid fa-trash-can text-xs"></i>
+            </button>
+          </div>
         </td>
       </tr>
     `;
@@ -986,6 +1064,11 @@ function viewProfile(dataIndex) {
     </div>
   `;
 
+  const btnDelete = document.getElementById('btnDeleteCandidateInModal');
+  if (btnDelete) {
+    btnDelete.onclick = () => deleteCandidate(item.id || item[FIELD_NAMES.id]);
+  }
+
   modal.classList.remove('hidden');
 }
 
@@ -995,6 +1078,10 @@ function closeProfileModal() {
 
 // تصدير البيانات المعروضة حالياً إلى ملف Excel
 function exportToExcel() {
+  if (filteredData.length === 0) {
+    alert('لا توجد بيانات لتصديرها حالياً.');
+    return;
+  }
   const exportCols = [
     "رقم الهويه",
     "الجنس",

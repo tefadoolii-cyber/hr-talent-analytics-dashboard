@@ -118,8 +118,11 @@
           <i class="fa-solid fa-print"></i>
         </button>
 
-        <!-- زر استعادة البيانات الأصلية، تغيير كلمة المرور وقفل الداشبورد -->
+        <!-- زر حذف كل البيانات، استعادة البيانات الأصلية، تغيير كلمة المرور وقفل الداشبورد -->
         <div class="h-6 w-px bg-slate-200 mx-1 hidden sm:block"></div>
+        <button onclick="clearAllData()" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 rounded-xl text-xs font-bold transition flex items-center gap-1.5" title="حذف وتفريغ كافة السجلات والبيانات من الداشبورد للبدء من جديد">
+          <i class="fa-solid fa-trash-can text-[11px]"></i> حذف كل البيانات
+        </button>
         <button onclick="resetToFactoryData()" class="px-2.5 py-2 bg-slate-100 hover:bg-amber-50 hover:text-amber-700 text-slate-700 border border-slate-200/80 rounded-xl text-xs font-bold transition flex items-center gap-1.5" title="استعادة قاعدة البيانات الأصلية الأولية (1,197 كادر)">
           <i class="fa-solid fa-rotate-left text-[11px]"></i> استعادة الأصل
         </button>
@@ -419,6 +422,9 @@
           <span id="recordCountBadge" class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
             20 سجل متاح
           </span>
+          <button onclick="clearAllData()" class="px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:bg-rose-50 border border-rose-200/80 rounded-lg transition inline-flex items-center gap-1" title="حذف وتفريغ كافة البيانات">
+            <i class="fa-solid fa-trash-can text-[10px]"></i> مسح كل البيانات
+          </button>
         </div>
         <div class="text-xs text-slate-500 font-medium">
           انقر على "عرض الملف الكامل" للاطلاع على كامل الدورات ومجالات الخبرة 1 و2 و3 والرخص.
@@ -452,11 +458,13 @@
         <div class="w-16 h-16 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-2xl mx-auto mb-3">
           <i class="fa-solid fa-folder-open"></i>
         </div>
-        <h4 class="text-sm font-bold text-slate-700 mb-1">لا توجد بيانات مطابقة لخيارات التصفية</h4>
-        <p class="text-xs text-slate-500 mb-4">جرب تغيير كلمات البحث أو إعادة ضبط الفلاتر للاطلاع على السجلات.</p>
-        <button onclick="resetFilters()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition">
-          إعادة ضبط الفلاتر
-        </button>
+        <h4 id="emptyStateTitle" class="text-sm font-bold text-slate-700 mb-1">لا توجد بيانات مطابقة لخيارات التصفية</h4>
+        <p id="emptyStateDesc" class="text-xs text-slate-500 mb-4">جرب تغيير كلمات البحث أو إعادة ضبط الفلاتر للاطلاع على السجلات.</p>
+        <div id="emptyStateActions" class="flex flex-wrap items-center justify-center gap-2">
+          <button onclick="resetFilters()" class="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition">
+            إعادة ضبط الفلاتر
+          </button>
+        </div>
       </div>
 
       <!-- شريط ترقيم وتصفح الصفحات (Pagination) -->
@@ -505,7 +513,10 @@
       </div>
 
       <!-- ذيل المودال -->
-      <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+      <div class="p-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center gap-2">
+        <button id="btnDeleteCandidateInModal" class="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5 border border-rose-200" title="حذف هذا الكادر نهائياً من الداشبورد">
+          <i class="fa-solid fa-trash-can text-xs"></i> حذف هذا الكادر
+        </button>
         <button onclick="closeProfileModal()" class="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-xl transition">
           إغلاق
         </button>
