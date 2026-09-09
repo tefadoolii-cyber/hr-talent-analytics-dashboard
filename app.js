@@ -8,6 +8,7 @@ let currentSort = { column: 'id', direction: 'asc' };
 
 // تعريف أسماء الأعمدة المعتمدة
 const FIELD_NAMES = {
+  name: "الاسم",
   id: "رقم الهويه",
   gender: "الجنس",
   degree: "المؤهل الدراسي",
@@ -401,8 +402,9 @@ function applyFilters() {
   const maxExp = parseFloat(document.getElementById('filterMaxExp')?.value) || 999;
 
   filteredData = talentData.filter(item => {
-    // 1. بحث عام (رقم الهوية، المسمى، التخصص، الشهادات، الرخص)
+    // 1. بحث عام (اسم المرشح، رقم الهوية، المسمى، التخصص، الشهادات، الرخص)
     if (searchQuery) {
+      const nameStr = String(item[FIELD_NAMES.name] || item['الاسم'] || '').toLowerCase();
       const idStr = String(item[FIELD_NAMES.id] || '').toLowerCase();
       const majorStr = String(item[FIELD_NAMES.major] || '').toLowerCase();
       const titleStr = String(item[FIELD_NAMES.jobTitle] || '').toLowerCase();
@@ -410,7 +412,8 @@ function applyFilters() {
       const certsStr = `${item[FIELD_NAMES.cert1]} ${item[FIELD_NAMES.cert2]} ${item[FIELD_NAMES.cert3]}`.toLowerCase();
       const fieldsStr = `${item[FIELD_NAMES.expField1]} ${item[FIELD_NAMES.expField2]} ${item[FIELD_NAMES.expField3]}`.toLowerCase();
 
-      const matchesSearch = idStr.includes(searchQuery) ||
+      const matchesSearch = nameStr.includes(searchQuery) ||
+                            idStr.includes(searchQuery) ||
                             majorStr.includes(searchQuery) ||
                             titleStr.includes(searchQuery) ||
                             licenseStr.includes(searchQuery) ||
@@ -820,9 +823,19 @@ function renderTable() {
     const expYears = row[FIELD_NAMES.totalExp] || 0;
     const expMonths = row[FIELD_NAMES.totalExpMonths] || 0;
 
+    const candName = String(row[FIELD_NAMES.name] || row['الاسم'] || '').trim();
+    const hasCandName = candName && !['لا يوجد', '—', 'غير محدد', 'null', 'undefined'].includes(candName);
+    const idVal = row[FIELD_NAMES.id] || '—';
+    const candidateCol = hasCandName
+      ? `<div>
+           <div class="font-bold text-slate-900 text-xs">${candName}</div>
+           <div class="font-mono text-[11px] text-slate-500 font-semibold">${idVal}</div>
+         </div>`
+      : `<span class="font-mono text-xs font-bold text-slate-800">${idVal}</span>`;
+
     html += `
       <tr class="hover:bg-slate-50/80 transition-colors border-b border-slate-100">
-        <td class="px-4 py-3 font-mono text-xs font-bold text-slate-800">${row[FIELD_NAMES.id] || '—'}</td>
+        <td class="px-4 py-3">${candidateCol}</td>
         <td class="px-4 py-3 text-xs">${genderBadge}</td>
         <td class="px-4 py-3 text-xs font-medium text-slate-700">${row[FIELD_NAMES.degree] || '—'}</td>
         <td class="px-4 py-3 text-xs text-slate-700 font-medium">${row[FIELD_NAMES.major] || '—'}</td>
@@ -942,6 +955,9 @@ function viewProfile(dataIndex) {
   const extraCerts = String(item[FIELD_NAMES.extraCerts] || 'لا');
   const hasExtraCerts = extraCerts.toLowerCase().startsWith('نعم');
 
+  const candName = String(item[FIELD_NAMES.name] || item['الاسم'] || '').trim();
+  const hasCandName = candName && !['لا يوجد', '—', 'غير محدد', 'null', 'undefined'].includes(candName);
+
   modalContent.innerHTML = `
     <!-- رأس البطاقة -->
     <div class="flex flex-col sm:flex-row items-center gap-4 p-5 bg-gradient-to-r from-slate-50 to-indigo-50/40 rounded-2xl border border-slate-200/80 mb-5">
@@ -950,7 +966,8 @@ function viewProfile(dataIndex) {
       </div>
       <div class="text-center sm:text-right flex-1">
         <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
-          <span class="text-lg font-black text-slate-800 font-mono tracking-wider">${item[FIELD_NAMES.id]}</span>
+          ${hasCandName ? `<span class="text-base font-black text-slate-900">${candName}</span>` : ''}
+          <span class="text-sm font-bold text-slate-700 font-mono tracking-wider">${hasCandName ? `(${item[FIELD_NAMES.id]})` : item[FIELD_NAMES.id]}</span>
           <span class="px-2.5 py-0.5 rounded-full text-xs font-bold ${isFemale ? 'bg-pink-100 text-pink-700' : 'bg-blue-100 text-blue-700'}">
             ${item[FIELD_NAMES.gender]}
           </span>
@@ -1082,7 +1099,12 @@ function exportToExcel() {
     alert('لا توجد بيانات لتصديرها حالياً.');
     return;
   }
+  const hasNames = filteredData.some(item => {
+    const n = item[FIELD_NAMES.name] || item['الاسم'];
+    return n && n !== 'لا يوجد' && n !== '—';
+  });
   const exportCols = [
+    ...(hasNames ? ["الاسم"] : []),
     "رقم الهويه",
     "الجنس",
     "المؤهل الدراسي",
@@ -1478,6 +1500,9 @@ function handleAddCandidateSubmit(e) {
   e.preventDefault();
   const form = e.target;
 
+  let cName = (form.candidateName?.value || '').trim();
+  if (!cName) cName = 'لا يوجد';
+
   let idNum = (form.idNumber?.value || '').trim();
   if (!idNum) idNum = 'لا يوجد';
 
@@ -1514,6 +1539,7 @@ function handleAddCandidateSubmit(e) {
 
   const newRecord = {
     id: Date.now(),
+    "الاسم": cName,
     "رقم الهويه": idNum,
     "الجنس": form.gender?.value || 'لا يوجد',
     "المؤهل الدراسي": (form.degree?.value || '').trim() || 'لا يوجد',
@@ -1589,6 +1615,9 @@ async function handlePdfFile(file) {
 
     // تعبئة نموذج المراجعة بالقيم المستخرجة
     if (fileNameBadge) fileNameBadge.textContent = `اسم الملف: ${file.name}`;
+    if (document.getElementById('pdf_candidateName')) {
+      document.getElementById('pdf_candidateName').value = parsed['الاسم'] || 'لا يوجد';
+    }
     document.getElementById('pdf_idNumber').value = parsed['رقم الهويه'];
     document.getElementById('pdf_gender').value = parsed['الجنس'];
     document.getElementById('pdf_degree').value = parsed['المؤهل الدراسي'];
@@ -1626,6 +1655,9 @@ function handlePdfReviewSubmit(e) {
   e.preventDefault();
   const form = e.target;
 
+  let cName = (form.candidateName?.value || '').trim();
+  if (!cName) cName = 'لا يوجد';
+
   let idNum = (form.idNumber?.value || '').trim();
   if (!idNum) idNum = 'لا يوجد';
 
@@ -1662,6 +1694,7 @@ function handlePdfReviewSubmit(e) {
 
   const newRecord = {
     id: Date.now(),
+    "الاسم": cName,
     "رقم الهويه": idNum,
     "الجنس": form.gender?.value || 'لا يوجد',
     "المؤهل الدراسي": (form.degree?.value || '').trim() || 'لا يوجد',
