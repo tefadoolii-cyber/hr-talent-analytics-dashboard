@@ -1338,12 +1338,12 @@ function handleFileUpload(file) {
           'national id', 'id', 'civil id', 'iqama'
         ]));
 
-        const exactIdMatch = rawIdVal.match(/\b(10\d{8}|20\d{8})\b/);
+        const exactIdMatch = rawIdVal.match(/\b([12]\d{9})\b/);
         if (exactIdMatch) {
           idNum = exactIdMatch[1];
         } else {
           for (const val of Object.values(row)) {
-            const m = toCleanStr(val).match(/\b(10\d{8}|20\d{8})\b/);
+            const m = toCleanStr(val).match(/\b([12]\d{9})\b/);
             if (m) {
               idNum = m[1];
               break;
@@ -1506,8 +1506,8 @@ function handleAddCandidateSubmit(e) {
   let idNum = (form.idNumber?.value || '').trim();
   if (!idNum) idNum = 'لا يوجد';
 
-  if (idNum !== 'لا يوجد' && !/^(?:10|20)\d{8}$/.test(idNum)) {
-    alert('تنبيه: رقم الهوية يجب أن يتكون من 10 أرقام ويبدأ حصراً بـ 10 أو 20 (أو يُترك كـ "لا يوجد").');
+  if (idNum !== 'لا يوجد' && !/^[12]\d{9}$/.test(idNum)) {
+    alert('تنبيه: رقم الهوية يجب أن يتكون من 10 أرقام ويبدأ بـ 1 أو 2 (أو يُترك كـ "لا يوجد").');
     return;
   }
 
@@ -1661,8 +1661,8 @@ function handlePdfReviewSubmit(e) {
   let idNum = (form.idNumber?.value || '').trim();
   if (!idNum) idNum = 'لا يوجد';
 
-  if (idNum !== 'لا يوجد' && !/^(?:10|20)\d{8}$/.test(idNum)) {
-    alert('تنبيه: رقم الهوية يجب أن يتكون من 10 أرقام ويبدأ حصراً بـ 10 أو 20 (أو اكتب "لا يوجد").');
+  if (idNum !== 'لا يوجد' && !/^[12]\d{9}$/.test(idNum)) {
+    alert('تنبيه: رقم الهوية يجب أن يتكون من 10 أرقام ويبدأ بـ 1 أو 2 (أو اكتب "لا يوجد").');
     return;
   }
 
