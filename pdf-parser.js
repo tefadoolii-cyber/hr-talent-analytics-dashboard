@@ -1,6 +1,7 @@
 // ==========================================================================
-// محرك قراءة واستخراج البيانات الذكي عالي الدقة من ملفات PDF (Wisal Smart PDF Engine)
-// متوافق مع نظام Mozilla PDF.js مع معالجة تخطيط الأسطر والنصوص العربية المعكوسة
+// محرك قراءة واستخراج البيانات عالي الدقة من ملفات PDF (Wisal Smart PDF Engine)
+// متوافق مع نظام Mozilla PDF.js مع معالجة تخطيط الأسطر والنصوص العربية
+// القواعد الصارمة: لا مقترحات مصطنعة نهائياً، رقم الهوية يبدأ حصراً بـ 10 أو 20 (10 خانات)، وأي حقل غير موجود يُسجل كـ "لا يوجد"
 // ==========================================================================
 
 if (typeof window !== 'undefined' && window.pdfjsLib) {
@@ -58,7 +59,6 @@ async function extractTextFromPdf(file) {
     const items = textContent.items;
     if (!items || items.length === 0) continue;
 
-    // تجميع العناصر على أساس الإحداثي الرأسي (Y) لضمان عدم دمج أسطر مختلفة
     const sortedItems = [...items].sort((a, b) => {
       const yDiff = b.transform[5] - a.transform[5];
       if (Math.abs(yDiff) > 6) return yDiff;
@@ -99,130 +99,95 @@ async function extractTextFromPdf(file) {
 }
 
 /**
- * محرك استخراج البيانات عالي الدقة والمطابقة لقواعد البيانات
+ * محرك استخراج البيانات الواقعية فقط دون أي مقترحات أو تخمينات
  */
 function parseCandidateFromText(rawText, fileName = '') {
-  const cleanRaw = normalizeDigits(rawText);
+  const cleanRaw = normalizeDigits(rawText || '');
   const lines = cleanRaw.split('\n').map(l => l.trim()).filter(Boolean);
   const oneLineText = lines.join(' ');
 
-  // 1. استخراج رقم الهوية الوطنية أو الإقامة (10 أرقام تبدأ بـ 1 أو 2)
-  let nationalId = '';
-  const labeledIdMatch = cleanRaw.match(/(?:الهوية|السجل\s*المدني|الإقامة|الاقامة|الهوية\s*الوطنية|ID|National\s*ID|Iqama)[:\s#]*([12]\d{9})/i);
-  if (labeledIdMatch) {
-    nationalId = labeledIdMatch[1];
+  // 1. استخراج رقم الهوية الوطنية أو الإقامة (10 خانات تبدأ بـ 10 أو 20 حصراً)
+  let nationalId = 'لا يوجد';
+  const validIdRegex = /\b(10\d{8}|20\d{8})\b/;
+
+  const fileIdMatch = String(fileName).match(validIdRegex);
+  if (fileIdMatch) {
+    nationalId = fileIdMatch[1];
   } else {
-    const anyGovId = cleanRaw.match(/\b([12]\d{9})\b/);
-    if (anyGovId) {
-      nationalId = anyGovId[1];
+    const labeledIdMatch = cleanRaw.match(/(?:الهوية|السجل\s*المدني|الإقامة|الاقامة|الهوية\s*الوطنية|ID|National\s*ID|Iqama)[:\s#]*(10\d{8}|20\d{8})\b/i);
+    if (labeledIdMatch) {
+      nationalId = labeledIdMatch[1];
     } else {
-      const fileIdMatch = fileName.match(/\b([12]\d{9})\b/);
-      if (fileIdMatch) {
-        nationalId = fileIdMatch[1];
+      const anyGovId = cleanRaw.match(validIdRegex);
+      if (anyGovId) {
+        nationalId = anyGovId[1];
       }
     }
   }
 
-  // 2. استخراج الاسم وتحديد الجنس بدقة
-  let candidateName = '';
-  for (let i = 0; i < Math.min(lines.length, 5); i++) {
-    const l = lines[i];
-    if (!/(?:سيرة\s*ذاتية|Curriculum|Resume|CV|المملكة|وزارة|شركة|مؤسسة|بسم\s*الله)/i.test(l) && l.length >= 4 && l.length <= 40) {
-      if (!candidateName) candidateName = l;
+  // 2. استخراج الاسم
+  let candidateName = 'لا يوجد';
+  const explicitName = cleanRaw.match(/(?:الاسم|اسم\s*المرشح|اسم\s*الموظف|Name|Full\s*Name)[:\s\-]+([^\n,،.]{3,40})/i);
+  if (explicitName) {
+    candidateName = explicitName[1].trim();
+  } else {
+    for (let i = 0; i < Math.min(lines.length, 6); i++) {
+      const l = lines[i].trim();
+      if (!/(?:ال?سيرة\s*ال?ذاتية|Curriculum|Resume|CV|المملكة|وزارة|شركة|مؤسسة|بسم\s*الله|بيانات\s*شخصية|المعلومات\s*الشخصية)/i.test(l) && l.length >= 4 && l.length <= 40) {
+        candidateName = l;
+        break;
+      }
     }
   }
 
-  let gender = 'ذكر';
-  const femaleNames = /(?:سارة|ساره|نورة|نوره|فاطمة|فاطمه|مريم|ريم|هند|منى|أمل|مها|أروى|شهد|لينا|دلال|خلود|غادة|غاده|رنا|حنان|تهاني|أسماء|سحر|نجلاء|وفاء|لطيفة|لطيفه|حصة|حصه|عبير|نوف|منيرة|منيره|العنود|بشاير|روان|شروق|أماني|عائشة|عائشه|زينب|لمى|شذى|عهود|سعاد|هيا|بدور|وجدان|سمر|سوسن|إيمان|ولاء|رزان|جواهر|أفنان|يارا|ريما|جمانة|مشاعل)/i;
-  const femaleKeywords = /(?:أنثى|انثى|سيدة|آنسة|Female|Woman|سعودية|مواطنة|خريجة|حاصلة|متخصصة|أخصائية|مديرة|مهندسة|باحثة|عملت|ولدت)/i;
-  
-  if (femaleKeywords.test(oneLineText) || (candidateName && femaleNames.test(candidateName))) {
+  // 3. استخراج الجنس (فقط إذا ذكر صراحة، دون تخمين)
+  let gender = 'لا يوجد';
+  if (/(?:الجنس|النوع)\s*[:\-]?\s*أنثى/i.test(cleanRaw) || /\bأنثى\b/i.test(cleanRaw) || /\bFemale\b/i.test(cleanRaw) || /(?:سعودية|مواطنة|خريجة)\b/.test(cleanRaw)) {
     gender = 'أنثى';
-  } else if (/(?:ذكر|رجل|Male|Man|سعودي|مواطن|خريج|حاصل)/i.test(oneLineText)) {
+  } else if (/(?:الجنس|النوع)\s*[:\-]?\s*ذكر/i.test(cleanRaw) || /\bذكر\b/i.test(cleanRaw) || /\bMale\b/i.test(cleanRaw) || /(?:سعودي|مواطن|خريج)\b/.test(cleanRaw)) {
     gender = 'ذكر';
   }
 
-  // 3. استخراج المؤهل الدراسي بدقة
-  let degree = 'غير محدد';
-  if (/(?:دكتوراه|دكتوراة|PhD|Doctorate|Doctor\s*of)/i.test(oneLineText)) {
+  // 4. استخراج المؤهل الدراسي (فقط ما ذكر صراحة)
+  let degree = 'لا يوجد';
+  if (/(?:دكتوراه|دكتوراة|PhD|Doctorate)/i.test(oneLineText)) {
     degree = 'دكتوراه';
-  } else if (/(?:ماجستير|Master|MSc|MBA|M\.A|ماستر)/i.test(oneLineText)) {
+  } else if (/(?:ماجستير|Master|MSc|MBA|ماستر)/i.test(oneLineText)) {
     degree = 'ماجستير';
-  } else if (/(?:دبلوم\s*عالي|Higher\s*Diploma|دبلوم\s*ما\s*بعد\s*البكالوريوس)/i.test(oneLineText)) {
+  } else if (/(?:دبلوم\s*عالي|Higher\s*Diploma)/i.test(oneLineText)) {
     degree = 'دبلوم عالي';
-  } else if (/(?:بكالوريوس|Bachelor|BSc|B\.Sc|B\.A|ليسانس|بكالوريس|جامعية|شهادة\s*جامعية)/i.test(oneLineText)) {
+  } else if (/(?:بكالوريوس|Bachelor|BSc|ليسانس|بكالوريس)/i.test(oneLineText)) {
     degree = 'بكالوريوس';
-  } else if (/(?:دبلوم\s*متوسط|دبلوم\s*كلية|دبلوم|Diploma|معهد|كلية\s*تقنية|Associate)/i.test(oneLineText)) {
+  } else if (/(?:دبلوم\s*متوسط|دبلوم\s*كلية|دبلوم|Diploma)/i.test(oneLineText)) {
     degree = 'دبلوم';
-  } else if (/(?:ثانوية\s*عامة|ثانوية|ثانويه|High\s*School|Secondary)/i.test(oneLineText)) {
+  } else if (/(?:ثانوية\s*عامة|الثانوية\s*العامة|ثانوية|ثانويه|High\s*School)/i.test(oneLineText)) {
     degree = 'ثانوية عامة';
   } else if (/(?:كفاءة|متوسطة)/i.test(oneLineText)) {
     degree = 'كفاءة متوسطة';
   }
 
-  // 4. استخراج التخصص الأكاديمي بدقة
-  let major = '';
-  const explicitMajorMatch = cleanRaw.match(/(?:التخصص|تخصص|القسم|قسم|المجال|Major|Field\s*of\s*Study)[:\s\-]+([^\n,،.\/]{3,45})/i)
-                         || cleanRaw.match(/(?:بكالوريوس|ماجستير|دبلوم)\s*(?:في|تخصص)?\s*([^\n,،.\/]{3,45})/i);
-
+  // 5. استخراج التخصص (فقط إذا ذكر صراحة)
+  let major = 'لا يوجد';
+  const explicitMajorMatch = cleanRaw.match(/(?:التخصص|تخصص|القسم|قسم|المجال\s*الأكاديمي|Major|Field\s*of\s*Study)[:\s\-]+([^\n,،.\/]{2,45})/i)
+                          || cleanRaw.match(/(?:بكالوريوس|ماجستير|دبلوم|شهادة)\s*(?:في|تخصص)?\s*([^\n,،.\/]{2,45})/i);
   if (explicitMajorMatch) {
     let candidateMajor = explicitMajorMatch[1].trim();
-    if (!/^(?:عام|الكل|غير|سنة|جامعة|كلية)/.test(candidateMajor)) {
+    if (!/^(?:عام|الكل|غير|سنة|جامعة|كلية|لا|بدون)/i.test(candidateMajor) && candidateMajor.length >= 2) {
       major = candidateMajor;
     }
   }
 
-  const majorDictionary = [
-    { pattern: /(?:أمن\s*سيبراني|Cyber\s*Security)/i, val: 'أمن سيبراني' },
-    { pattern: /(?:علوم\s*حاسب|Computer\s*Science)/i, val: 'علوم حاسب' },
-    { pattern: /(?:نظم\s*معلومات\s*إدارية|MIS)/i, val: 'نظم معلومات إدارية' },
-    { pattern: /(?:نظم\s*معلومات|Information\s*Systems)/i, val: 'نظم معلومات' },
-    { pattern: /(?:تقنية\s*معلومات|Information\s*Technology|IT)/i, val: 'تقنية معلومات' },
-    { pattern: /(?:هندسة\s*برمجيات|Software\s*Engineering)/i, val: 'هندسة برمجيات' },
-    { pattern: /(?:ذكاء\s*اصطناعي|Artificial\s*Intelligence|AI)/i, val: 'ذكاء اصطناعي' },
-    { pattern: /(?:شبكات\s*حاسب|شبكات|Networks)/i, val: 'شبكات وتقنية اتصالات' },
-    { pattern: /(?:علوم\s*بيانات|Data\s*Science)/i, val: 'علوم بيانات وتحليل' },
-    { pattern: /(?:موارد\s*بشرية|Human\s*Resources|HR)/i, val: 'إدارة موارد بشرية' },
-    { pattern: /(?:إدارة\s*أعمال|Business\s*Administration)/i, val: 'إدارة أعمال' },
-    { pattern: /(?:إدارة\s*عامة|Public\s*Administration)/i, val: 'إدارة عامة' },
-    { pattern: /(?:محاسبة|Accounting)/i, val: 'محاسبة' },
-    { pattern: /(?:مالية|تمويل|بنوك|Finance|Banking)/i, val: 'مالية وتمويل' },
-    { pattern: /(?:تسويق\s*رقمي|Digital\s*Marketing)/i, val: 'تسويق رقمي' },
-    { pattern: /(?:تسويق|Marketing)/i, val: 'تسويق' },
-    { pattern: /(?:سياحة\s*وفندقة|إدارة\s*فندقية|ضيافة|Hospitality|Tourism)/i, val: 'سياحة وفندقة' },
-    { pattern: /(?:سلاسل\s*إمداد|لوجستيات|لوجستيك|Supply\s*Chain|Logistics)/i, val: 'سلاسل إمداد ولوجستيات' },
-    { pattern: /(?:قانون|حقوق|أنظمة|محاماة|Law)/i, val: 'قانون وأنظمة' },
-    { pattern: /(?:شريعة|دراسات\s*إسلامية|أصول\s*دين)/i, val: 'شريعة ودراسات إسلامية' },
-    { pattern: /(?:لغة\s*إنجليزية|ترجمة|English|Translation)/i, val: 'لغة إنجليزية وترجمة' },
-    { pattern: /(?:لغة\s*عربية|أدب\s*عربي)/i, val: 'لغة عربية' },
-    { pattern: /(?:علاقات\s*عامة|إعلام|صحافة|Public\s*Relations|PR|Media)/i, val: 'إعلام وعلاقات عامة' },
-    { pattern: /(?:تصميم\s*جرافيك|Graphic\s*Design)/i, val: 'تصميم جرافيك' },
-    { pattern: /(?:تصميم\s*داخلي|Interior\s*Design)/i, val: 'تصميم داخلي' },
-    { pattern: /(?:هندسة\s*صناعية|Industrial\s*Engineering)/i, val: 'هندسة صناعية' },
-    { pattern: /(?:هندسة\s*مدنية|Civil\s*Engineering)/i, val: 'هندسة مدنية' },
-    { pattern: /(?:هندسة\s*ميكانيكية|Mechanical\s*Engineering)/i, val: 'هندسة ميكانيكية' },
-    { pattern: /(?:هندسة\s*كهربائية|Electrical\s*Engineering)/i, val: 'هندسة كهربائية' },
-    { pattern: /(?:هندسة\s*معمارية|Architecture)/i, val: 'هندسة معمارية' },
-    { pattern: /(?:تمريض|Nursing)/i, val: 'تمريض' },
-    { pattern: /(?:صيدلة|Pharmacy)/i, val: 'صيدلة' },
-    { pattern: /(?:مختبرات\s*طبية|علوم\s*طبية)/i, val: 'علوم طبية ومختبرات' },
-    { pattern: /(?:إدارة\s*صحية|مستشفيات)/i, val: 'إدارة خدمات صحية ومستشفيات' },
-    { pattern: /(?:علم\s*نفس|Psychology)/i, val: 'علم نفس' },
-    { pattern: /(?:علم\s*اجتماع|خدمة\s*اجتماعية|Social\s*Work)/i, val: 'خدمة اجتماعية وعلم اجتماع' },
-    { pattern: /(?:رياضيات|إحصاء|Mathematics|Statistics)/i, val: 'رياضيات وإحصاء' },
-    { pattern: /(?:فيزياء|كيمياء|أحياء|علوم\s*عامة)/i, val: 'علوم طبيعية' },
-    { pattern: /(?:تاريخ|جغرافيا)/i, val: 'تاريخ وجغرافيا' }
-  ];
-
-  for (const item of majorDictionary) {
-    if (item.pattern.test(oneLineText)) {
-      major = item.val;
-      break;
+  // 6. استخراج المسمى الوظيفي (فقط إذا ذكر صراحة)
+  let jobTitle = 'لا يوجد';
+  const titleMatch = cleanRaw.match(/(?:المسمى\s*الوظيفي|المسمى\s*الحالي|المسمى|الوظيفة\s*المستهدفة|الوظيفة\s*الحالية|الوظيفة|الهدف\s*المهني|الهدف\s*الوظيفي|Job\s*Title|Position|Role)[:\s\-]+([^\n,،.]{2,45})/i);
+  if (titleMatch) {
+    const rawMatch = titleMatch[1].trim();
+    if (!/^(?:الحصول|العمل|تطوير|سيرة|طلب|الرغبة|لا|بدون)/i.test(rawMatch) && rawMatch.length >= 2) {
+      jobTitle = rawMatch;
     }
   }
-  if (!major) major = 'عام';
 
-  // 5. استخراج سنوات ومجالات الخبرة بدقة
+  // 7. استخراج سنوات الخبرة ومجالاتها
   let totalExpYears = 0;
   const isZeroExp = /(?:بدون\s*خبرة|لا\s*توجد\s*خبرة|لا\s*يوجد\s*خبرات|لا\s*يوجد\s*خبرة\s*سابقة|حديث\s*تخرج|حديثة\s*تخرج|0\s*سنة|0\s*سنوات|0\s*شهر|Fresh\s*Graduate|No\s*Experience)/i.test(oneLineText);
 
@@ -267,91 +232,59 @@ function parseCandidateFromText(rawText, fileName = '') {
     }
   }
 
-  const expFieldsFound = [];
-  const fieldRules = [
-    { regex: /(?:إدارة\s*مكاتب|سكرتارية|أعمال\s*مكتبية|مساعد\s*إداري|منسق\s*إداري)/i, val: 'إدارة المكاتب والأعمال الإدارية' },
-    { regex: /(?:خدمة\s*عملاء|استقبال|كول\s*سنتر|مركز\s*اتصال|تجربة\s*العميل|Customer\s*Service)/i, val: 'خدمة العملاء والاستقبال' },
-    { regex: /(?:موارد\s*بشرية|توظيف|شؤون\s*موظفين|رواتب|HR|Recruitment)/i, val: 'الموارد البشرية وشؤون الموظفين' },
-    { regex: /(?:محاسبة|مالية|أمين\s*صندوق|تدقيق|دفاتر|حسابات|Accounting|Finance)/i, val: 'العمليات المالية والمحاسبية' },
-    { regex: /(?:مبيعات|تسويق|تطوير\s*أعمال|علاقات\s*عامة|Sales|Marketing)/i, val: 'المبيعات وتطوير الأعمال' },
-    { regex: /(?:دعم\s*فني|صيانة\s*حاسب|شبكات|تقنية\s*معلومات|IT\s*Support)/i, val: 'الدعم الفني وتقنية المعلومات' },
-    { regex: /(?:فندقة|ضيافة|حجوزات|إسكان|إشراف\s*داخلي|تشغيل\s*فندقي|Front\s*Desk)/i, val: 'الضيافة والتشغيل الفندقي' },
-    { regex: /(?:إدارة\s*مشاريع|منسق\s*مشاريع|Project\s*Management)/i, val: 'إدارة المشاريع والتنسيق' },
-    { regex: /(?:مستودعات|مخازن|سلاسل\s*إمداد|لوجستيات|Warehouse|Logistics)/i, val: 'المستودعات والخدمات اللوجستية' },
-    { regex: /(?:أمن\s*وسلامة|سلامة\s*مهنية|OSHA|Safety)/i, val: 'الأمن والسلامة المهنية' }
-  ];
-
-  for (const rule of fieldRules) {
-    if (rule.regex.test(oneLineText)) {
-      expFieldsFound.push(rule.val);
-      if (expFieldsFound.length >= 3) break;
+  let expRoleOrCompany = 'لا يوجد';
+  const expSectionRegex = /(?:الخبرات|الخبرة\s*المهنية|الخبرات\s*السابقة|سجل\s*العمل|Experience|Work\s*Experience)[:\s\n]+([\s\S]{5,350}?)(?=(?:التعليم|المؤهلات|الدورات|الشهادات|المهارات|اللغات)|$)/i;
+  const expMatch = cleanRaw.match(expSectionRegex);
+  if (expMatch) {
+    const linesInExp = expMatch[1].split('\n')
+      .map(l => l.trim().replace(/^[-•*–]\s*/, ''))
+      .filter(l => l.length >= 3 && l.length <= 50 && !/^(?:الخبرات|المهام|المسؤوليات)/i.test(l));
+    if (linesInExp.length > 0) {
+      expRoleOrCompany = linesInExp[0];
     }
   }
 
-  let field1 = 'لا يوجد خبرات مسجلة (بدون خبرة)';
+  let field1 = 'لا يوجد';
   let years1 = 0;
-  let field2 = '—';
+  let field2 = 'لا يوجد';
   let years2 = 0;
-  let field3 = '—';
+  let field3 = 'لا يوجد';
   let years3 = 0;
 
   if (totalExpYears > 0) {
-    field1 = expFieldsFound[0] || 'العمليات الإدارية وخدمة العملاء';
-    if (expFieldsFound.length <= 1) {
-      years1 = totalExpYears;
-      field2 = '—';
-      years2 = 0;
-      field3 = '—';
-      years3 = 0;
-    } else if (expFieldsFound.length === 2) {
-      years1 = +(totalExpYears * 0.6).toFixed(1);
-      field2 = expFieldsFound[1];
-      years2 = +(totalExpYears - years1).toFixed(1);
-      field3 = '—';
-      years3 = 0;
-    } else {
-      years1 = +(totalExpYears * 0.5).toFixed(1);
-      field2 = expFieldsFound[1];
-      years2 = +(totalExpYears * 0.3).toFixed(1);
-      field3 = expFieldsFound[2];
-      years3 = +(totalExpYears - years1 - years2).toFixed(1);
-    }
+    field1 = expRoleOrCompany !== 'لا يوجد' ? expRoleOrCompany : (jobTitle !== 'لا يوجد' ? jobTitle : 'خبرة عملية مسجلة');
+    years1 = totalExpYears;
   }
 
-  // 6. استخراج الدورات والشهادات التدريبية (دون أي بيانات وهمية)
+  // 8. الدورات والشهادات
   const extractedCourses = [];
-  const courseSectionRegex = /(?:الدورات|الشهادات|البرامج\s*التدريبية|الدورات\s*التدريبية|Courses|Certifications|Training)[:\s\n]+([\s\S]{10,400}?)(?=(?:الخبرات|التعليم|المؤهلات|المهارات|اللغات|Skills|Experience|Education)|$)/i;
+  const courseSectionRegex = /(?:الدورات|الشهادات|البرامج\s*التدريبية|الدورات\s*التدريبية|Courses|Certifications|Training)[:\s\n]+([\s\S]{5,400}?)(?=(?:الخبرات|التعليم|المؤهلات|المهارات|اللغات|Skills|Experience|Education)|$)/i;
   const sectionMatch = cleanRaw.match(courseSectionRegex);
-  const textToSearchForCourses = sectionMatch ? sectionMatch[1] : cleanRaw;
+  const textToSearchForCourses = sectionMatch ? sectionMatch[1] : '';
 
-  const courseLines = textToSearchForCourses.match(/(?:دورة|شهادة|برنامج|دبلوم\s*تدريبي|ورشة\s*عمل|Certified|Course)\s*[:\-]?\s*([^\n,،.]{4,60})/gi) || [];
-  courseLines.forEach(c => {
-    const clean = c.trim().replace(/^[-•*–]\s*/, '');
-    if (!extractedCourses.includes(clean) && extractedCourses.length < 3) {
-      extractedCourses.push(clean);
-    }
-  });
+  if (textToSearchForCourses) {
+    const courseLines = textToSearchForCourses.match(/(?:دورة|شهادة|برنامج|دبلوم\s*تدريبي|ورشة\s*عمل|Certified|Course)\s*[:\-]?\s*([^\n,،.]{3,60})/gi) || [];
+    courseLines.forEach(c => {
+      const clean = c.trim().replace(/^[-•*–]\s*/, '');
+      if (!extractedCourses.includes(clean) && extractedCourses.length < 3) {
+        extractedCourses.push(clean);
+      }
+    });
 
-  const knownCertsList = [
-    'PMP إدارة مشاريع', 'إدارة الموارد البشرية CIPD', 'خدمة العملاء والتميز في الخدمة',
-    'الأمن السيبراني', 'اللغة الإنجليزية', 'الحاسب الآلي وتطبيقات المكاتب ICDL',
-    'إدارة الفنادق والضيافة', 'تدريب المدربين TOT', 'إدخال البيانات ومعالجة النصوص',
-    'المحاسبة المالية وضريبة القيمة المضافة', 'السلامة والصحة المهنية OSHA',
-    'التسويق الرقمي', 'تحليل البيانات Power BI / Excel', 'السكرتارية التنفيذية'
-  ];
-
-  for (const cert of knownCertsList) {
-    if (textToSearchForCourses.includes(cert) && !extractedCourses.includes(cert) && extractedCourses.length < 3) {
-      extractedCourses.push(cert);
+    if (extractedCourses.length === 0) {
+      const bulletLines = textToSearchForCourses.split('\n')
+        .map(l => l.trim().replace(/^[-•*–]\s*/, ''))
+        .filter(l => l.length >= 4 && l.length <= 55 && !/^(?:الدورات|الشهادات|التدريب)/i.test(l));
+      bulletLines.slice(0, 3).forEach(c => extractedCourses.push(c));
     }
   }
 
-  const cert1 = extractedCourses[0] || '—';
-  const cert2 = extractedCourses[1] || '—';
-  const cert3 = extractedCourses[2] || '—';
-  const extraCerts = extractedCourses.length >= 3 || /(?:دورات\s*أخرى|شهادات\s*إضافية)/i.test(oneLineText) ? 'نعم' : 'لا';
+  const cert1 = extractedCourses[0] || 'لا يوجد';
+  const cert2 = extractedCourses[1] || 'لا يوجد';
+  const cert3 = extractedCourses[2] || 'لا يوجد';
+  const extraCerts = extractedCourses.length >= 3 ? 'نعم' : 'لا يوجد';
 
-  // 7. استخراج الرخص المهنية والاعتمادات
+  // 9. الرخص المهنية
   let license = 'لا يوجد';
   if (/(?:هيئة\s*المهندسين|اعتماد\s*مهني\s*هندسي|Saudi\s*Council\s*of\s*Engineers)/i.test(oneLineText)) {
     license = 'شهادة الاعتماد المهني - هيئة المهندسين';
@@ -364,43 +297,13 @@ function parseCandidateFromText(rawText, fileName = '') {
   } else if (/(?:رخصة\s*قيادة\s*عمومي|نقل\s*ثقيل)/i.test(oneLineText)) {
     license = 'رخصة قيادة عمومي / نقل ثقيل';
   } else if (/(?:رخصة\s*قيادة|Driving\s*License)/i.test(oneLineText)) {
-    license = 'رخصة قيادة خاصة سارية';
+    license = 'رخصة قيادة سارية';
   }
 
-  // 8. استخراج المسمى الوظيفي المقترح / المستهدف
-  let jobTitle = '';
-  const titleMatch = cleanRaw.match(/(?:الهدف\s*الوظيفي|المسمى\s*الوظيفي|المسمى\s*الحالي|الوظيفة\s*المستهدفة|Job\s*Title|Objective|Position)[:\s\-]+([^\n,،.]{3,45})/i);
-  if (titleMatch) {
-    const rawMatch = titleMatch[1].trim();
-    if (!/^(?:الحصول|العمل|تطوير|سيرة|طلب)/.test(rawMatch)) {
-      jobTitle = rawMatch;
-    }
-  }
-
-  if (!jobTitle) {
-    const titleInference = [
-      { regex: /موارد\s*بشرية/i, val: 'أخصائي موارد بشرية' },
-      { regex: /(?:محاسبة|مالية)/i, val: 'محاسب مالي' },
-      { regex: /(?:سياحة|فندقة|ضيافة)/i, val: 'مشرف خدمات وضيافة' },
-      { regex: /(?:تسويق|إعلام|علاقات\s*عامة)/i, val: 'أخصائي تسويق وتواصل' },
-      { regex: /(?:أمن\s*سيبراني|شبكات|حاسب|برمجيات|تقنية)/i, val: 'أخصائي تقنية معلومات ونظم' },
-      { regex: /(?:قانون|أنظمة|حقوق)/i, val: 'مستشار قانوني / باحث أنظمة' },
-      { regex: /(?:خدمة\s*عملاء|استقبال)/i, val: 'أخصائي خدمة عملاء' },
-      { regex: /(?:إدارة\s*أعمال|إدارة\s*عامة)/i, val: 'منسق إداري وأعمال' }
-    ];
-    for (const item of titleInference) {
-      if (item.regex.test(major) || item.regex.test(oneLineText)) {
-        jobTitle = item.val;
-        break;
-      }
-    }
-  }
-  if (!jobTitle) jobTitle = 'غير محدد';
-
-  // 9. هل يوجد خبرات لم تذكر
-  let unmentioned = 'لا';
+  // 10. هل يوجد خبرات لم تذكر
+  let unmentioned = 'لا يوجد';
   if (/(?:أعمال\s*حرة|تطوع|استشارات|خبرات\s*أخرى|عمل\s*حر)/i.test(oneLineText)) {
-    unmentioned = 'نعم (أعمال حرة ومشاريع تطوعية)';
+    unmentioned = 'نعم';
   }
 
   return {

@@ -562,7 +562,7 @@ function updateKPIs() {
   const majorCounts = {};
   filteredData.forEach(d => {
     const m = d[FIELD_NAMES.major];
-    if (m && m !== 'عام') majorCounts[m] = (majorCounts[m] || 0) + 1;
+    if (m && m !== 'عام' && m !== 'لا يوجد' && m !== 'غير محدد') majorCounts[m] = (majorCounts[m] || 0) + 1;
   });
   const sortedMajors = Object.entries(majorCounts).sort((a, b) => b[1] - a[1]);
   if (document.getElementById('kpiTopMajor')) {
@@ -718,8 +718,8 @@ function updateCharts() {
   // 3. تحديث أعلى التخصصات (أول 7 تخصصات محددة)
   const majorCounts = {};
   filteredData.forEach(d => {
-    const m = d[FIELD_NAMES.major] || 'عام';
-    if (m !== 'عام') majorCounts[m] = (majorCounts[m] || 0) + 1;
+    const m = d[FIELD_NAMES.major];
+    if (m && m !== 'عام' && m !== 'لا يوجد' && m !== 'غير محدد') majorCounts[m] = (majorCounts[m] || 0) + 1;
   });
   const sortedMajors = Object.entries(majorCounts).sort((a, b) => b[1] - a[1]).slice(0, 7);
   charts.major.data.labels = sortedMajors.map(m => m[0]);
@@ -729,8 +729,8 @@ function updateCharts() {
   // 4. تحديث المسميات المقترحة (أول 7 مسميات محددة)
   const jobCounts = {};
   filteredData.forEach(d => {
-    const j = d[FIELD_NAMES.jobTitle] || 'غير محدد';
-    if (j !== 'غير محدد') jobCounts[j] = (jobCounts[j] || 0) + 1;
+    const j = d[FIELD_NAMES.jobTitle];
+    if (j && j !== 'غير محدد' && j !== 'لا يوجد') jobCounts[j] = (jobCounts[j] || 0) + 1;
   });
   const sortedJobs = Object.entries(jobCounts).sort((a, b) => b[1] - a[1]).slice(0, 7);
   charts.job.data.labels = sortedJobs.map(j => j[0]);
@@ -1290,28 +1290,46 @@ function handleFileUpload(file) {
       const existingIdMap = new Map();
       talentData.forEach((item, index) => {
         const id = String(item[FIELD_NAMES.id] || '').trim();
-        if (id) existingIdMap.set(id, index);
+        if (id && id !== 'لا يوجد') existingIdMap.set(id, index);
       });
 
       let addedCount = 0;
       let updatedCount = 0;
 
       jsonData.forEach((row, idx) => {
-        // استخراج الجنس مع دعم استنتاجه من الاسم العربي عند غيابه
+        // 1. الجنس (فقط المذكور صراحة دون تخمين)
         let g = String(getClean(row, ['الجنس', 'النوع', 'gender', 'sex'])).trim();
         if (g === 'انثى') g = 'أنثى';
+        if (g !== 'ذكر' && g !== 'أنثى') {
+          g = 'لا يوجد';
+        }
 
-        const candidateName = String(getClean(row, ['الاسم', 'اسم المرشح', 'اسم الموظف', 'الاسم الكامل', 'اسم المتدرب', 'name', 'full name'])).trim();
-        if ((!g || g === 'غير محدد') && candidateName) {
-          if (/(?:سارة|ساره|نورة|نوره|فاطمة|مريم|ريم|هند|منى|أمل|مها|أروى|شهد|لينا|دلال|خلود|غادة|رنا|حنان|تهاني|أسماء|سحر|نجلاء|وفاء|لطيفة|حصة|عبير|نوف|منيرة|روان|عائشة|عائشه|زينب|أفنان|يارا|ريما|مشاعل)/.test(candidateName)) {
-            g = 'أنثى';
-          } else {
-            g = 'ذكر';
+        // 2. الاسم
+        let candidateName = String(getClean(row, ['الاسم', 'اسم المرشح', 'اسم الموظف', 'الاسم الكامل', 'اسم المتدرب', 'name', 'full name'])).trim();
+        if (!candidateName) candidateName = 'لا يوجد';
+
+        // 3. رقم الهوية الوطنية أو الإقامة (القاعدة الصارمة: 10 أرقام وتبدأ بـ 10 أو 20 حصراً)
+        let idNum = 'لا يوجد';
+        const rawIdVal = toCleanStr(getClean(row, [
+          'رقم الهوية', 'رقم الهويه', 'الهوية', 'الهويه', 'السجل المدني', 'سجل مدني',
+          'رقم السجل', 'الاقامة', 'الإقامة', 'رقم الإقامة', 'رقم البطاقة', 'الهوية الوطنية',
+          'national id', 'id', 'civil id', 'iqama'
+        ]));
+
+        const exactIdMatch = rawIdVal.match(/\b(10\d{8}|20\d{8})\b/);
+        if (exactIdMatch) {
+          idNum = exactIdMatch[1];
+        } else {
+          for (const val of Object.values(row)) {
+            const m = toCleanStr(val).match(/\b(10\d{8}|20\d{8})\b/);
+            if (m) {
+              idNum = m[1];
+              break;
+            }
           }
         }
-        if (!g) g = 'غير محدد';
 
-        // استخراج سنوات الخبرة
+        // 4. استخراج سنوات ومجالات الخبرة
         const totalExpObj = parseExperience(getClean(row, [
           'عدد سنوات الخبرة الاجمالية', 'عدد السنوات الخبره الاجماليه', 'عدد سنوات الخبرة الإجمالية',
           'سنوات الخبرة الاجمالية', 'سنوات الخبرة', 'إجمالي الخبرة', 'الخبرة الاجمالية',
@@ -1332,68 +1350,60 @@ function handleFileUpload(file) {
         let expYears3 = expObj3.years;
         let expMonths3 = expObj3.months;
 
-        if (totalExpYears === 0) {
-          totalExpYears = 0;
-          totalExpMonths = 0;
-          expYears1 = 0;
-          expMonths1 = 0;
-          expYears2 = 0;
-          expMonths2 = 0;
-          expYears3 = 0;
-          expMonths3 = 0;
-        }
-
         let field1 = String(getClean(row, ['مجال الخبرة 1', 'مجال الخبره 1', 'مجال الخبرة', 'مجال الخبره', 'الخبرة 1', 'مجال العمل 1', 'طبيعة العمل', 'المنطقة', 'القطاع'])).trim();
         let field2 = String(getClean(row, ['مجال الخبرة 2', 'مجال الخبره 2', 'الخبرة 2', 'مجال العمل 2'])).trim();
         let field3 = String(getClean(row, ['مجال الخبرة 3', 'مجال الخبره 3', 'الخبرة 3', 'مجال العمل 3'])).trim();
 
         if (totalExpYears === 0) {
-          field1 = field1 && field1 !== '-' && field1 !== '0' ? field1 : 'لا يوجد خبرات مسجلة (بدون خبرة)';
-          field2 = field2 && field2 !== '-' && field2 !== '0' ? field2 : '—';
-          field3 = field3 && field3 !== '-' && field3 !== '0' ? field3 : '—';
+          totalExpYears = 0;
+          totalExpMonths = 0;
+          field1 = 'لا يوجد';
+          expYears1 = 0;
+          expMonths1 = 0;
+          field2 = 'لا يوجد';
+          expYears2 = 0;
+          expMonths2 = 0;
+          field3 = 'لا يوجد';
+          expYears3 = 0;
+          expMonths3 = 0;
         } else {
-          field1 = field1 || '—';
-          field2 = field2 || '—';
-          field3 = field3 || '—';
+          field1 = field1 && !['-', '0', '—', 'لا يوجد خبرات مسجلة (بدون خبرة)'].includes(field1) ? field1 : 'لا يوجد';
+          field2 = field2 && !['-', '0', '—'].includes(field2) ? field2 : 'لا يوجد';
+          field3 = field3 && !['-', '0', '—'].includes(field3) ? field3 : 'لا يوجد';
         }
 
-        let unmentioned = String(getClean(row, ['هل يوجد خبرات غير المذكوره ادناه؟', 'هل يوجد خبرات غير المذكورة ادناه؟', 'هل يوجد خبرات لم تذكر', 'خبرات لم تذكر', 'خبرات إضافية'])).trim() || 'لا';
-        if (unmentioned === '-' || unmentioned === '0') unmentioned = 'لا';
+        // 5. المؤهل والتخصص والمسمى والشهادات والرخص (إن لم توجد تكتب "لا يوجد")
+        let degreeVal = String(getClean(row, ['المؤهل الدراسي', 'المؤهل العلمي', 'المؤهل', 'الدرجة العلمية', 'الشهادة', 'education', 'degree'])).trim();
+        if (!degreeVal || ['-', '0', 'غير محدد'].includes(degreeVal)) degreeVal = 'لا يوجد';
 
-        let license = String(getClean(row, ['الرخص المهنية', 'الرخصة المهنية', 'الرخصه المهنيه', 'الرخص', 'الرخصة', 'الاعتماد المهني', 'الاعتمادات', 'licenses'])).trim() || 'لا يوجد';
-        if (license === '-' || license === '0' || license === 'بدون' || license === 'لا') license = 'لا يوجد';
+        let majorVal = String(getClean(row, ['التخصص', 'تخصص', 'التخصص الدقيق', 'مجال الدراسة', 'القسم', 'major', 'specialization'])).trim();
+        if (!majorVal || ['-', '0', 'عام', 'غير محدد'].includes(majorVal)) majorVal = 'لا يوجد';
 
-        let idNum = String(getClean(row, [
-          'رقم الهوية', 'رقم الهويه', 'الهوية', 'الهويه', 'السجل المدني', 'سجل مدني',
-          'رقم السجل', 'الاقامة', 'الإقامة', 'رقم الإقامة', 'رقم البطاقة', 'الهوية الوطنية',
-          'national id', 'id', 'civil id', 'iqama'
-        ])).trim();
+        let jobTitleVal = String(getClean(row, ['المسمى الوظيفي المقترح', 'المسمى المقترح', 'المسمى الوظيفي', 'المسمى', 'الوظيفة', 'المنصب', 'job title', 'position', 'role'])).trim();
+        if (!jobTitleVal || ['-', '0', 'غير محدد'].includes(jobTitleVal)) jobTitleVal = 'لا يوجد';
 
-        if (!idNum) {
-          for (const val of Object.values(row)) {
-            const m = String(val).match(/\b([12]\d{9})\b/);
-            if (m) {
-              idNum = m[1];
-              break;
-            }
-          }
-        }
+        let cert1Val = String(getClean(row, ['الدورات والشهادات 1', 'الدورات والشهادات1', 'الدورات والشهادات', 'الدورات التدريبية', 'الدورات', 'الشهادات', 'courses', 'certifications'])).trim();
+        if (!cert1Val || ['-', '0', '—', 'لا', 'لا يوجد دورات مذكورة'].includes(cert1Val)) cert1Val = 'لا يوجد';
 
-        if (!idNum) {
-          idNum = String(1000000000 + talentData.length + idx);
-        }
+        let cert2Val = String(getClean(row, ['الدورات والشهادات 2', 'الدورات والشهادات2', 'الدورة 2', 'الشهادة 2'])).trim();
+        if (!cert2Val || ['-', '0', '—', 'لا'].includes(cert2Val)) cert2Val = 'لا يوجد';
 
-        const degreeVal = String(getClean(row, ['المؤهل الدراسي', 'المؤهل العلمي', 'المؤهل', 'الدرجة العلمية', 'الشهادة', 'education', 'degree'])).trim() || 'غير محدد';
-        const majorVal = String(getClean(row, ['التخصص', 'تخصص', 'التخصص الدقيق', 'مجال الدراسة', 'القسم', 'major', 'specialization'])).trim() || 'عام';
-        const cert1Val = String(getClean(row, ['الدورات والشهادات 1', 'الدورات والشهادات1', 'الدورات والشهادات', 'الدورات التدريبية', 'الدورات', 'الشهادات', 'courses', 'certifications'])).trim() || '—';
-        const cert2Val = String(getClean(row, ['الدورات والشهادات 2', 'الدورات والشهادات2', 'الدورة 2', 'الشهادة 2'])).trim() || '—';
-        const cert3Val = String(getClean(row, ['الدورات والشهادات 3', 'الدورات والشهادات3', 'الدورة 3', 'الشهادة 3'])).trim() || '—';
-        const extraCertsVal = String(getClean(row, ['هل يوجد شهادات ودورات غير المذكورة ادناه؟', 'شهادات إضافية'])).trim() || 'لا';
-        const jobTitleVal = String(getClean(row, ['المسمى الوظيفي المقترح', 'المسمى المقترح', 'المسمى الوظيفي', 'المسمى', 'الوظيفة', 'المنصب', 'job title', 'position', 'role'])).trim() || 'غير محدد';
+        let cert3Val = String(getClean(row, ['الدورات والشهادات 3', 'الدورات والشهادات3', 'الدورة 3', 'الشهادة 3'])).trim();
+        if (!cert3Val || ['-', '0', '—', 'لا'].includes(cert3Val)) cert3Val = 'لا يوجد';
+
+        let extraCertsVal = String(getClean(row, ['هل يوجد شهادات ودورات غير المذكورة ادناه؟', 'شهادات إضافية'])).trim();
+        if (!extraCertsVal || ['-', '0', 'لا'].includes(extraCertsVal)) extraCertsVal = 'لا يوجد';
+
+        let unmentioned = String(getClean(row, ['هل يوجد خبرات غير المذكوره ادناه؟', 'هل يوجد خبرات غير المذكورة ادناه؟', 'هل يوجد خبرات لم تذكر', 'خبرات لم تذكر', 'خبرات إضافية'])).trim();
+        if (!unmentioned || ['-', '0', 'لا'].includes(unmentioned)) unmentioned = 'لا يوجد';
+
+        let license = String(getClean(row, ['الرخص المهنية', 'الرخصة المهنية', 'الرخصه المهنيه', 'الرخص', 'الرخصة', 'الاعتماد المهني', 'الاعتمادات', 'licenses'])).trim();
+        if (!license || ['-', '0', 'بدون', 'لا'].includes(license)) license = 'لا يوجد';
 
         const record = {
-          id: Date.now() + idx,
+          id: Date.now() + Math.floor(Math.random() * 100000) + idx,
           "رقم الهويه": idNum,
+          "الاسم": candidateName,
           "الجنس": g,
           "المؤهل الدراسي": degreeVal,
           "التخصص": majorVal,
@@ -1417,13 +1427,15 @@ function handleFileUpload(file) {
           "الرخص المهنية": license
         };
 
-        if (existingIdMap.has(idNum)) {
+        if (idNum !== 'لا يوجد' && existingIdMap.has(idNum)) {
           const existingIdx = existingIdMap.get(idNum);
           talentData[existingIdx] = { ...talentData[existingIdx], ...record, id: talentData[existingIdx].id };
           updatedCount++;
         } else {
           talentData.unshift(record);
-          existingIdMap.set(idNum, 0);
+          if (idNum !== 'لا يوجد') {
+            existingIdMap.set(idNum, 0);
+          }
           addedCount++;
         }
       });
@@ -1466,9 +1478,11 @@ function handleAddCandidateSubmit(e) {
   e.preventDefault();
   const form = e.target;
 
-  const idNum = (form.idNumber?.value || '').trim();
-  if (!idNum) {
-    alert('يرجى إدخال رقم الهوية');
+  let idNum = (form.idNumber?.value || '').trim();
+  if (!idNum) idNum = 'لا يوجد';
+
+  if (idNum !== 'لا يوجد' && !/^(?:10|20)\d{8}$/.test(idNum)) {
+    alert('تنبيه: رقم الهوية يجب أن يتكون من 10 أرقام ويبدأ حصراً بـ 10 أو 20 (أو يُترك كـ "لا يوجد").');
     return;
   }
 
@@ -1485,45 +1499,57 @@ function handleAddCandidateSubmit(e) {
   }
 
   let field1 = (form.expField1?.value || '').trim();
+  let field2 = (form.expField2?.value || '').trim();
+  let field3 = (form.expField3?.value || '').trim();
+
   if (expY === 0) {
-    field1 = field1 && field1 !== '—' ? field1 : 'لا يوجد خبرات مسجلة (بدون خبرة)';
+    field1 = 'لا يوجد';
+    field2 = 'لا يوجد';
+    field3 = 'لا يوجد';
   } else {
-    field1 = field1 || '—';
+    field1 = field1 || 'لا يوجد';
+    field2 = field2 || 'لا يوجد';
+    field3 = field3 || 'لا يوجد';
   }
 
   const newRecord = {
     id: Date.now(),
     "رقم الهويه": idNum,
-    "الجنس": form.gender?.value || 'غير محدد',
-    "المؤهل الدراسي": (form.degree?.value || '').trim() || 'غير محدد',
-    "التخصص": (form.major?.value || '').trim() || 'عام',
-    "الدورات والشهادات": (form.cert1?.value || '').trim() || '—',
-    "الدورات والشهادات 2": (form.cert2?.value || '').trim() || '—',
-    "الدورات والشهادات 3": (form.cert3?.value || '').trim() || '—',
-    "شهادات إضافية": form.extraCerts?.value || 'لا',
+    "الجنس": form.gender?.value || 'لا يوجد',
+    "المؤهل الدراسي": (form.degree?.value || '').trim() || 'لا يوجد',
+    "التخصص": (form.major?.value || '').trim() || 'لا يوجد',
+    "الدورات والشهادات": (form.cert1?.value || '').trim() || 'لا يوجد',
+    "الدورات والشهادات 2": (form.cert2?.value || '').trim() || 'لا يوجد',
+    "الدورات والشهادات 3": (form.cert3?.value || '').trim() || 'لا يوجد',
+    "شهادات إضافية": form.extraCerts?.value || 'لا يوجد',
     "عدد السنوات الخبره الاجماليه": expY,
     "عدد شهور الخبرة الاجمالية": Math.round(expY * 12),
     "مجال الخبره": field1,
     "عدد سنوات الخبره 1": expY1,
     "شهور الخبره 1": Math.round(expY1 * 12),
-    "مجال الخبره 2": (form.expField2?.value || '').trim() || '—',
+    "مجال الخبره 2": field2,
     "عدد سنوات الخبره 2": expY2,
     "شهور الخبره 2": Math.round(expY2 * 12),
-    "مجال الخبره 3": (form.expField3?.value || '').trim() || '—',
+    "مجال الخبره 3": field3,
     "عددسنوات الخبره 3": expY3,
     "شهور الخبره 3": Math.round(expY3 * 12),
-    "هل يوجد خبرات لم تذكر": (form.unmentioned?.value || '').trim() || 'لا',
-    "المسمى الوظيفي المقترح": (form.jobTitle?.value || '').trim() || 'غير محدد',
+    "هل يوجد خبرات لم تذكر": (form.unmentioned?.value || '').trim() || 'لا يوجد',
+    "المسمى الوظيفي المقترح": (form.jobTitle?.value || '').trim() || 'لا يوجد',
     "الرخص المهنية": (form.license?.value || '').trim() || 'لا يوجد'
   };
 
-  const existingIdx = talentData.findIndex(item => String(item[FIELD_NAMES.id] || '').trim() === idNum);
-  if (existingIdx > -1) {
-    talentData[existingIdx] = { ...talentData[existingIdx], ...newRecord, id: talentData[existingIdx].id };
-    alert(`تم تحديث بيانات الكادر الموجود مسبقاً برقم الهوية: ${idNum} بنجاح دون حذف أي بيانات!`);
+  if (idNum !== 'لا يوجد') {
+    const existingIdx = talentData.findIndex(item => String(item[FIELD_NAMES.id] || '').trim() === idNum);
+    if (existingIdx > -1) {
+      talentData[existingIdx] = { ...talentData[existingIdx], ...newRecord, id: talentData[existingIdx].id };
+      alert(`تم تحديث بيانات الكادر الموجود مسبقاً برقم الهوية: ${idNum} بنجاح دون حذف أي بيانات!`);
+    } else {
+      talentData.unshift(newRecord);
+      alert(`تمت إضافة الكادر المهني برقم الهوية: ${idNum} بنجاح مع الحفاظ على كافة السجلات السابقة!`);
+    }
   } else {
     talentData.unshift(newRecord);
-    alert(`تمت إضافة الكادر المهني برقم الهوية: ${idNum} بنجاح مع الحفاظ على كافة السجلات السابقة!`);
+    alert('تمت إضافة الكادر المهني بنجاح مع الحفاظ على كافة السجلات السابقة!');
   }
   saveTalentDataToStorage(talentData);
   closeAddModal();
@@ -1576,11 +1602,11 @@ async function handlePdfFile(file) {
 
     const expY = parsed['عدد السنوات الخبره الاجماليه'] !== undefined ? parsed['عدد السنوات الخبره الاجماليه'] : 0;
     document.getElementById('pdf_totalExp').value = expY;
-    document.getElementById('pdf_expField1').value = parsed['مجال الخبره'] || (expY === 0 ? 'لا يوجد خبرات مسجلة (بدون خبرة)' : '—');
+    document.getElementById('pdf_expField1').value = parsed['مجال الخبره'] || 'لا يوجد';
     document.getElementById('pdf_expYears1').value = parsed['عدد سنوات الخبره 1'] !== undefined ? parsed['عدد سنوات الخبره 1'] : 0;
-    document.getElementById('pdf_expField2').value = parsed['مجال الخبره 2'] || '—';
+    document.getElementById('pdf_expField2').value = parsed['مجال الخبره 2'] || 'لا يوجد';
     document.getElementById('pdf_expYears2').value = parsed['عدد سنوات الخبره 2'] !== undefined ? parsed['عدد سنوات الخبره 2'] : 0;
-    document.getElementById('pdf_expField3').value = parsed['مجال الخبره 3'] || '—';
+    document.getElementById('pdf_expField3').value = parsed['مجال الخبره 3'] || 'لا يوجد';
     document.getElementById('pdf_expYears3').value = parsed['عددسنوات الخبره 3'] !== undefined ? parsed['عددسنوات الخبره 3'] : 0;
 
     document.getElementById('pdf_license').value = parsed['الرخص المهنية'];
@@ -1600,9 +1626,11 @@ function handlePdfReviewSubmit(e) {
   e.preventDefault();
   const form = e.target;
 
-  const idNum = (form.idNumber?.value || '').trim();
-  if (!idNum) {
-    alert('يرجى التأكد من إدخال رقم الهوية');
+  let idNum = (form.idNumber?.value || '').trim();
+  if (!idNum) idNum = 'لا يوجد';
+
+  if (idNum !== 'لا يوجد' && !/^(?:10|20)\d{8}$/.test(idNum)) {
+    alert('تنبيه: رقم الهوية يجب أن يتكون من 10 أرقام ويبدأ حصراً بـ 10 أو 20 (أو اكتب "لا يوجد").');
     return;
   }
 
@@ -1619,45 +1647,57 @@ function handlePdfReviewSubmit(e) {
   }
 
   let field1 = (form.expField1?.value || '').trim();
+  let field2 = (form.expField2?.value || '').trim();
+  let field3 = (form.expField3?.value || '').trim();
+
   if (expY === 0) {
-    field1 = field1 && field1 !== '—' ? field1 : 'لا يوجد خبرات مسجلة (بدون خبرة)';
+    field1 = 'لا يوجد';
+    field2 = 'لا يوجد';
+    field3 = 'لا يوجد';
   } else {
-    field1 = field1 || '—';
+    field1 = field1 || 'لا يوجد';
+    field2 = field2 || 'لا يوجد';
+    field3 = field3 || 'لا يوجد';
   }
 
   const newRecord = {
     id: Date.now(),
     "رقم الهويه": idNum,
-    "الجنس": form.gender?.value || 'ذكر',
-    "المؤهل الدراسي": (form.degree?.value || '').trim() || 'بكالوريوس',
-    "التخصص": (form.major?.value || '').trim() || 'إدارة أعمال',
-    "الدورات والشهادات": (form.cert1?.value || '').trim() || '—',
-    "الدورات والشهادات 2": (form.cert2?.value || '').trim() || '—',
-    "الدورات والشهادات 3": (form.cert3?.value || '').trim() || '—',
-    "شهادات إضافية": form.extraCerts?.value || 'لا',
+    "الجنس": form.gender?.value || 'لا يوجد',
+    "المؤهل الدراسي": (form.degree?.value || '').trim() || 'لا يوجد',
+    "التخصص": (form.major?.value || '').trim() || 'لا يوجد',
+    "الدورات والشهادات": (form.cert1?.value || '').trim() || 'لا يوجد',
+    "الدورات والشهادات 2": (form.cert2?.value || '').trim() || 'لا يوجد',
+    "الدورات والشهادات 3": (form.cert3?.value || '').trim() || 'لا يوجد',
+    "شهادات إضافية": form.extraCerts?.value || 'لا يوجد',
     "عدد السنوات الخبره الاجماليه": expY,
     "عدد شهور الخبرة الاجمالية": Math.round(expY * 12),
     "مجال الخبره": field1,
     "عدد سنوات الخبره 1": expY1,
     "شهور الخبره 1": Math.round(expY1 * 12),
-    "مجال الخبره 2": (form.expField2?.value || '').trim() || '—',
+    "مجال الخبره 2": field2,
     "عدد سنوات الخبره 2": expY2,
     "شهور الخبره 2": Math.round(expY2 * 12),
-    "مجال الخبره 3": (form.expField3?.value || '').trim() || '—',
+    "مجال الخبره 3": field3,
     "عددسنوات الخبره 3": expY3,
     "شهور الخبره 3": Math.round(expY3 * 12),
-    "هل يوجد خبرات لم تذكر": (form.unmentioned?.value || '').trim() || 'لا',
-    "المسمى الوظيفي المقترح": (form.jobTitle?.value || '').trim() || 'غير محدد',
+    "هل يوجد خبرات لم تذكر": (form.unmentioned?.value || '').trim() || 'لا يوجد',
+    "المسمى الوظيفي المقترح": (form.jobTitle?.value || '').trim() || 'لا يوجد',
     "الرخص المهنية": (form.license?.value || '').trim() || 'لا يوجد'
   };
 
-  const existingIdx = talentData.findIndex(item => String(item[FIELD_NAMES.id] || '').trim() === idNum);
-  if (existingIdx > -1) {
-    talentData[existingIdx] = { ...talentData[existingIdx], ...newRecord, id: talentData[existingIdx].id };
-    alert(`تم تحديث بيانات الكادر الموجود مسبقاً برقم الهوية (${idNum}) بنجاح دون حذف أي بيانات سابقة!`);
+  if (idNum !== 'لا يوجد') {
+    const existingIdx = talentData.findIndex(item => String(item[FIELD_NAMES.id] || '').trim() === idNum);
+    if (existingIdx > -1) {
+      talentData[existingIdx] = { ...talentData[existingIdx], ...newRecord, id: talentData[existingIdx].id };
+      alert(`تم تحديث بيانات الكادر الموجود مسبقاً برقم الهوية (${idNum}) بنجاح دون حذف أي بيانات سابقة!`);
+    } else {
+      talentData.unshift(newRecord);
+      alert(`تم بنجاح استخراج واعتماد الكادر برقم الهوية (${idNum}) وإضافته إلى الداشبورد مع الحفاظ على كافة السجلات السابقة! 🎉`);
+    }
   } else {
     talentData.unshift(newRecord);
-    alert(`تم بنجاح استخراج واعتماد الكادر برقم الهوية (${idNum}) وإضافته إلى الداشبورد مع الحفاظ على كافة السجلات السابقة! 🎉`);
+    alert('تم بنجاح استخراج واعتماد الكادر وإضافته إلى الداشبورد مع الحفاظ على كافة السجلات السابقة! 🎉');
   }
   saveTalentDataToStorage(talentData);
   closePdfReviewModal();
