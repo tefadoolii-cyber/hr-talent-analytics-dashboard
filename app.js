@@ -342,8 +342,12 @@ window.resetToFactoryData = resetToFactoryData;
 // تهيئة التطبيق عند اكتمال تحميل الصفحة
 document.addEventListener('DOMContentLoaded', async () => {
   checkAuthStatus();
-  await initDashboard();
   setupEventListeners();
+  try {
+    await initDashboard();
+  } catch (err) {
+    console.error('Error during initDashboard:', err);
+  }
 });
 
 async function initDashboard() {
@@ -589,24 +593,19 @@ function applyFilters() {
 
 // إعادة ضبط الفلاتر
 function resetFilters() {
-  document.getElementById('searchInput').value = '';
-  document.getElementById('filterGender').value = '';
-  document.getElementById('filterDegree').value = '';
-  document.getElementById('filterMajor').value = '';
-  document.getElementById('filterJobTitle').value = '';
-  document.getElementById('filterLicense').value = '';
-  document.getElementById('filterCourse').value = '';
-  document.getElementById('filterCourseText').value = '';
-  document.getElementById('filterUnmentioned').value = '';
-  document.getElementById('filterMinExp').value = '';
-  document.getElementById('filterMaxExp').value = '';
+  ['searchInput', 'filterGender', 'filterDegree', 'filterMajor', 'filterJobTitle', 'filterLicense', 'filterCourse', 'filterCourseText', 'filterUnmentioned', 'filterMinExp', 'filterMaxExp'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
   applyFilters();
 }
 
 // تحديث بطاقات المؤشرات الرئيسية (KPIs)
 function updateKPIs() {
   const total = filteredData.length;
-  document.getElementById('kpiTotal').textContent = total.toLocaleString('ar-SA');
+  if (document.getElementById('kpiTotal')) {
+    document.getElementById('kpiTotal').textContent = total.toLocaleString('ar-SA');
+  }
   
   const headerActiveCountBadge = document.getElementById('headerActiveCountBadge');
   if (headerActiveCountBadge) {
@@ -614,12 +613,12 @@ function updateKPIs() {
   }
 
   if (total === 0) {
-    document.getElementById('kpiAvgExp').textContent = '0 سنة';
-    document.getElementById('kpiMaleCount').textContent = '0 (0%)';
-    document.getElementById('kpiFemaleCount').textContent = '0 (0%)';
-    document.getElementById('kpiLicenseCount').textContent = '0 (0%)';
-    document.getElementById('kpiExtraExpCount').textContent = '0 (0%)';
-    document.getElementById('kpiTopMajor').textContent = 'لا توجد نتائج';
+    if (document.getElementById('kpiAvgExp')) document.getElementById('kpiAvgExp').textContent = '0 سنة';
+    if (document.getElementById('kpiMaleCount')) document.getElementById('kpiMaleCount').textContent = '0 (0%)';
+    if (document.getElementById('kpiFemaleCount')) document.getElementById('kpiFemaleCount').textContent = '0 (0%)';
+    if (document.getElementById('kpiLicenseCount')) document.getElementById('kpiLicenseCount').textContent = '0 (0%)';
+    if (document.getElementById('kpiExtraExpCount')) document.getElementById('kpiExtraExpCount').textContent = '0 (0%)';
+    if (document.getElementById('kpiTopMajor')) document.getElementById('kpiTopMajor').textContent = 'لا توجد نتائج';
     return;
   }
 
@@ -627,15 +626,15 @@ function updateKPIs() {
   const totalYears = filteredData.reduce((acc, curr) => acc + (parseFloat(curr[FIELD_NAMES.totalExp]) || 0), 0);
   const avgExp = (totalYears / total).toFixed(1);
   const avgMonths = (filteredData.reduce((acc, curr) => acc + (parseFloat(curr[FIELD_NAMES.totalExpMonths]) || 0), 0) / total).toFixed(0);
-  document.getElementById('kpiAvgExp').textContent = `${avgExp} سنة (${avgMonths} شهر)`;
+  if (document.getElementById('kpiAvgExp')) document.getElementById('kpiAvgExp').textContent = `${avgExp} سنة (${avgMonths} شهر)`;
 
   // توزيع الجنس
   const males = filteredData.filter(d => d[FIELD_NAMES.gender] === 'ذكر').length;
   const females = filteredData.filter(d => d[FIELD_NAMES.gender] === 'أنثى' || d[FIELD_NAMES.gender] === 'انثى').length;
   const malePct = ((males / total) * 100).toFixed(0);
   const femalePct = ((females / total) * 100).toFixed(0);
-  document.getElementById('kpiMaleCount').textContent = `${males} (${malePct}%)`;
-  document.getElementById('kpiFemaleCount').textContent = `${females} (${femalePct}%)`;
+  if (document.getElementById('kpiMaleCount')) document.getElementById('kpiMaleCount').textContent = `${males} (${malePct}%)`;
+  if (document.getElementById('kpiFemaleCount')) document.getElementById('kpiFemaleCount').textContent = `${females} (${femalePct}%)`;
 
   // أصحاب الرخص المهنية
   const hasLicense = filteredData.filter(d => {
@@ -643,7 +642,7 @@ function updateKPIs() {
     return lic && lic !== 'لا يوجد' && lic !== 'بدون' && lic !== 'لا' && lic !== '-' && lic !== '0';
   }).length;
   const licPct = ((hasLicense / total) * 100).toFixed(1);
-  document.getElementById('kpiLicenseCount').textContent = `${hasLicense} (${licPct}%)`;
+  if (document.getElementById('kpiLicenseCount')) document.getElementById('kpiLicenseCount').textContent = `${hasLicense} (${licPct}%)`;
 
   // خبرات إضافية غير مذكورة
   const extraExp = filteredData.filter(d => {
@@ -651,7 +650,7 @@ function updateKPIs() {
     return str.startsWith('نعم');
   }).length;
   const extraPct = ((extraExp / total) * 100).toFixed(1);
-  document.getElementById('kpiExtraExpCount').textContent = `${extraExp} (${extraPct}%)`;
+  if (document.getElementById('kpiExtraExpCount')) document.getElementById('kpiExtraExpCount').textContent = `${extraExp} (${extraPct}%)`;
 
   // أكثر التخصصات شيوعاً
   const majorCounts = {};
@@ -1555,6 +1554,7 @@ function handleFileUpload(file) {
       });
 
       // حفظ في التخزين الدائم (IndexedDB)
+      localStorage.removeItem('wisal_data_cleared');
       await saveTalentDataToStorage(talentData);
 
       populateFilterDropdowns();
@@ -1669,6 +1669,7 @@ function handleAddCandidateSubmit(e) {
     talentData.unshift(newRecord);
     alert('تمت إضافة الكادر المهني بنجاح مع الحفاظ على كافة السجلات السابقة!');
   }
+  localStorage.removeItem('wisal_data_cleared');
   saveTalentDataToStorage(talentData);
   closeAddModal();
   populateFilterDropdowns();
@@ -1828,6 +1829,7 @@ function handlePdfReviewSubmit(e) {
     talentData.unshift(newRecord);
     alert('تم بنجاح استخراج واعتماد الكادر وإضافته إلى الداشبورد مع الحفاظ على كافة السجلات السابقة! 🎉');
   }
+  localStorage.removeItem('wisal_data_cleared');
   saveTalentDataToStorage(talentData);
   closePdfReviewModal();
   populateFilterDropdowns();
@@ -1868,6 +1870,7 @@ function setupEventListeners() {
         } else {
           handleFileUpload(file);
         }
+        e.target.value = '';
       }
     });
   }
@@ -1878,6 +1881,7 @@ function setupEventListeners() {
     pdfInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         handlePdfFile(e.target.files[0]);
+        e.target.value = '';
       }
     });
   }
@@ -1916,3 +1920,12 @@ function setupEventListeners() {
     });
   }
 }
+
+window.handleFileUpload = handleFileUpload;
+window.handlePdfFile = handlePdfFile;
+window.triggerPdfUpload = triggerPdfUpload;
+Object.defineProperty(window, 'talentData', {
+  get() { return talentData; },
+  set(v) { talentData = v; },
+  configurable: true
+});
