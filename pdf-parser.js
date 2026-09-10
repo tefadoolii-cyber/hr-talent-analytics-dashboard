@@ -5,7 +5,7 @@
 // ==========================================================================
 
 if (typeof window !== 'undefined' && window.pdfjsLib) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
 }
 
 /**
@@ -133,9 +133,48 @@ function cleanCandidateNameFromFileName(fileName) {
  * قراءة نصوص ملف الـ PDF مع الحفاظ التام على بنية الأسطر والمحاذاة الرأسية
  */
 async function extractTextFromPdf(file) {
-  const arrayBuffer = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-  const pdfDoc = await loadingTask.promise;
+  let arrayBuffer;
+  if (file && typeof file.arrayBuffer === 'function') {
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (e) {
+      arrayBuffer = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+  } else if (file) {
+    arrayBuffer = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  } else {
+    throw new Error('لم يتم تمرير ملف صالح.');
+  }
+
+  // التأكد من تهيئة مسار العامل (Worker) محلياً لمنع قيود الأمان عبر النطاقات
+  if (typeof window !== 'undefined' && window.pdfjsLib) {
+    if (!pdfjsLib.GlobalWorkerOptions.workerSrc || pdfjsLib.GlobalWorkerOptions.workerSrc.includes('cdnjs')) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'pdf.worker.min.js';
+    }
+  }
+
+  let pdfDoc;
+  try {
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+    pdfDoc = await loadingTask.promise;
+  } catch (workerErr) {
+    console.warn('Worker error, retrying PDF loading:', workerErr);
+    const fallbackTask = pdfjsLib.getDocument({
+      data: arrayBuffer,
+      stopAtErrors: false
+    });
+    pdfDoc = await fallbackTask.promise;
+  }
   
   let fullLines = [];
 

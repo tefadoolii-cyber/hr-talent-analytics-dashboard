@@ -1,5 +1,7 @@
 // إعداد وتتبع حالة التطبيق
-let talentData = [...INITIAL_TALENT_DATA];
+let talentData = (typeof localStorage !== 'undefined' && localStorage.getItem('wisal_data_cleared') === 'true')
+  ? []
+  : (typeof INITIAL_TALENT_DATA !== 'undefined' ? [...INITIAL_TALENT_DATA] : []);
 let filteredData = [...talentData];
 let charts = {};
 let currentPage = 1;
@@ -168,8 +170,8 @@ window.openChangePasswordModal = openChangePasswordModal;
 window.closeChangePasswordModal = closeChangePasswordModal;
 window.handleChangePasswordSubmit = handleChangePasswordSubmit;
 
-// ==========================================
-// طبقة التخزين الدائم للبيانات في المتصفح (IndexedDB Persistent Storage)
+// // ==========================================
+// طبقة التخزين والمزامنة المركزية بين الأجهزة (IndexedDB + Central Server API)
 // ==========================================
 const DB_NAME = 'WisalHR_Database';
 const DB_VERSION = 1;
@@ -197,7 +199,7 @@ function openDB() {
   });
 }
 
-async function saveTalentDataToStorage(data) {
+async function saveTalentDataToIndexedDB(data) {
   try {
     const db = await openDB();
     if (db) {
@@ -214,7 +216,7 @@ async function saveTalentDataToStorage(data) {
   }
 }
 
-async function loadTalentDataFromStorage() {
+async function loadTalentDataFromIndexedDB() {
   try {
     const db = await openDB();
     if (db) {
@@ -235,7 +237,28 @@ async function loadTalentDataFromStorage() {
   return null;
 }
 
-// حذف وتفريغ كافة البيانات من الداشبورد
+// حفظ وتحديث البيانات محلياً وعلى السيرفر المركزي لضمان المزامنة بين مختلف الأجهزة
+async function saveTalentDataToStorage(data) {
+  await saveTalentDataToIndexedDB(data);
+
+  // مزامنة فورية مع السيرفر المركزي
+  try {
+    const isCleared = (data.length === 0 && localStorage.getItem('wisal_data_cleared') === 'true');
+    await fetch('/api/talents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({
+        isCleared: isCleared,
+        talents: data
+      })
+    });
+  } catch (e) {
+    // يعمل التطبيق أوفلاين أو على استضافة ثابتة إن تعذر الوصول للسيرفر
+    console.warn('Central server sync offline/skipped:', e);
+  }
+}
+
+// حذف وتفريغ كافة البيانات من الداشبورد ومزامنتها فوراً مع جميع الأجهزة
 async function clearAllData() {
   if (talentData.length === 0) {
     alert('الداشبورد فارغ بالفعل، لا توجد بيانات لحذفها!');
@@ -244,21 +267,30 @@ async function clearAllData() {
 
   const isConfirmed = confirm(
     `⚠️ تحذير هام:\n\nهل أنت متأكد تماماً من رغبتك في حذف وتفريغ كافة البيانات (${talentData.length.toLocaleString('ar-SA')} كادر) من الداشبورد؟\n\n` +
-    '• سيتم مسح جميع السجلات الحالية نهائياً.\n' +
-    '• سيبقى الداشبورد فارغاً حتى بعد تحديث الصفحة.\n' +
-    '• سيمكنك رفع ملفاتك وسيرك الذاتية الخاصة من الصفر.\n' +
-    '• (ملاحظة: يمكنك دائماً استرجاع البيانات الأولية في أي وقت بالضغط على زر "استعادة الأصل").'
+    '• سيتم مسح جميع السجلات الحالية نهائياً من هذا الجهاز وجميع الأجهزة الأخرى.\n' +
+    '• سيبقى الداشبورد فارغاً حتى بعد تحديث الصفحة أو فتحه في هاتف أو جهاز كمبيوتر آخر.\n' +
+    '• سيمكنك رفع ملفاتك وسيرك الذاتية الخاصة من الصفر في أي وقت.\n' +
+    '• (ملاحظة: يمكنك دائماً استرجاع البيانات الأولية بالضغط على زر "استعادة الأصل").'
   );
 
   if (!isConfirmed) return;
 
   talentData = [];
-  await saveTalentDataToStorage(talentData);
   filteredData = [];
+  localStorage.setItem('wisal_data_cleared', 'true');
+  await saveTalentDataToIndexedDB([]);
+
+  // إشعار السيرفر المركزي بحذف البيانات لتعميمه على أي جهاز يتصل بالرابط
+  try {
+    await fetch('/api/clear', { method: 'POST' });
+  } catch (e) {
+    console.warn('Central server clear call:', e);
+  }
+
   currentPage = 1;
   populateFilterDropdowns();
   applyFilters();
-  alert('تم حذف وتفريغ كافة البيانات بنجاح! الداشبورد أصبح فارغاً وجاهزاً لاستقبال ملفاتك وبياناتك الجديدة.');
+  alert('تم حذف وتفريغ كافة البيانات بنجاح! الداشبورد أصبح فارغاً الآن على هذا الجهاز وجميع الأجهزة الأخرى.');
 }
 window.clearAllData = clearAllData;
 
@@ -277,15 +309,32 @@ async function deleteCandidate(id) {
 }
 window.deleteCandidate = deleteCandidate;
 
+// استعادة البيانات الأصلية على كافة الأجهزة
 async function resetToFactoryData() {
-  if (confirm('هل أنت متأكد من استعادة بيانات النظام الأصلية؟\nسيتم حذف التعديلات والملفات المستوردة والعودة لقاعدة البيانات الأولية (1,197 كادر).')) {
-    talentData = [...INITIAL_TALENT_DATA];
-    await saveTalentDataToStorage(talentData);
+  if (confirm('هل أنت متأكد من استعادة بيانات النظام الأصلية؟\nسيتم العودة لقاعدة البيانات الأولية (1,197 كادر) على هذا الجهاز وجميع الأجهزة المتصلة.')) {
+    localStorage.removeItem('wisal_data_cleared');
+    talentData = typeof INITIAL_TALENT_DATA !== 'undefined' ? [...INITIAL_TALENT_DATA] : [];
     filteredData = [...talentData];
+    await saveTalentDataToIndexedDB(talentData);
+
+    try {
+      await fetch('/api/reset', { method: 'POST' });
+      await fetch('/api/talents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({
+          isCleared: false,
+          talents: talentData
+        })
+      });
+    } catch (e) {
+      console.warn('Central server reset call:', e);
+    }
+
     currentPage = 1;
     populateFilterDropdowns();
     applyFilters();
-    alert('تمت استعادة البيانات الأولية بنجاح!');
+    alert('تمت استعادة البيانات الأولية بنجاح على كافة الأجهزة!');
   }
 }
 window.resetToFactoryData = resetToFactoryData;
@@ -298,11 +347,54 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function initDashboard() {
-  const savedData = await loadTalentDataFromStorage();
-  if (savedData !== null && Array.isArray(savedData)) {
-    talentData = savedData;
-    filteredData = [...talentData];
+  let loadedFromApi = false;
+
+  // 1. محاولة جلب الحالة المشتركة من السيرفر المركزي لمزامنة أي أجهزة متصلة
+  try {
+    const res = await fetch('/api/talents', { cache: 'no-store' });
+    if (res.ok) {
+      const dbState = await res.json();
+      if (dbState && typeof dbState === 'object') {
+        loadedFromApi = true;
+        if (dbState.isCleared) {
+          // تم مسح البيانات على السيرفر المركزي، يُعرض فارغاً لجميع الأجهزة
+          talentData = [];
+          localStorage.setItem('wisal_data_cleared', 'true');
+          await saveTalentDataToIndexedDB([]);
+        } else if (Array.isArray(dbState.talents)) {
+          // توجد بيانات أو إضافات مشتركة
+          talentData = dbState.talents;
+          localStorage.removeItem('wisal_data_cleared');
+          await saveTalentDataToIndexedDB(talentData);
+        } else {
+          // حالة استعادة الأصل الأولية
+          if (localStorage.getItem('wisal_data_cleared') === 'true') {
+            talentData = [];
+          } else {
+            talentData = typeof INITIAL_TALENT_DATA !== 'undefined' ? [...INITIAL_TALENT_DATA] : [];
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.log('Central sync server not reachable, fallback to browser storage:', err);
   }
+
+  // 2. نمط العمل المحلي / أوفلاين في حال تعذر الاتصال بالسيرفر
+  if (!loadedFromApi) {
+    if (localStorage.getItem('wisal_data_cleared') === 'true') {
+      talentData = [];
+    } else {
+      const savedData = await loadTalentDataFromIndexedDB();
+      if (savedData !== null && Array.isArray(savedData)) {
+        talentData = savedData;
+      } else {
+        talentData = typeof INITIAL_TALENT_DATA !== 'undefined' ? [...INITIAL_TALENT_DATA] : [];
+      }
+    }
+  }
+
+  filteredData = [...talentData];
   populateFilterDropdowns();
   applyFilters();
   initCharts();
@@ -1596,7 +1688,11 @@ function closePdfReviewModal() {
 // معالجة وقراءة ملف PDF
 async function handlePdfFile(file) {
   if (!file) return;
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
+  const isPdf = (file.name && file.name.toLowerCase().endsWith('.pdf')) || 
+                (file.type && file.type.includes('pdf')) ||
+                (file.type === '' && file.name && file.name.toLowerCase().includes('.pdf'));
+
+  if (!isPdf) {
     alert('يرجى اختيار ملف بصيغة PDF فقط.');
     return;
   }
@@ -1758,13 +1854,16 @@ function setupEventListeners() {
   // نموذج مراجعة واعتماد بيانات الـ PDF
   document.getElementById('pdfReviewForm')?.addEventListener('submit', handlePdfReviewSubmit);
 
-  // رفع ملف إكسيل
+  // رفع ملف إكسيل أو PDF
   const fileInput = document.getElementById('excelFileInput');
   if (fileInput) {
     fileInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         const file = e.target.files[0];
-        if (file.name.toLowerCase().endsWith('.pdf')) {
+        const isPdf = (file.name && file.name.toLowerCase().endsWith('.pdf')) || 
+                      (file.type && file.type.includes('pdf')) ||
+                      (file.type === '' && file.name && file.name.toLowerCase().includes('.pdf'));
+        if (isPdf) {
           handlePdfFile(file);
         } else {
           handleFileUpload(file);
@@ -1805,7 +1904,10 @@ function setupEventListeners() {
       const files = dt.files;
       if (files && files[0]) {
         const file = files[0];
-        if (file.name.toLowerCase().endsWith('.pdf')) {
+        const isPdf = (file.name && file.name.toLowerCase().endsWith('.pdf')) || 
+                      (file.type && file.type.includes('pdf')) ||
+                      (file.type === '' && file.name && file.name.toLowerCase().includes('.pdf'));
+        if (isPdf) {
           handlePdfFile(file);
         } else {
           handleFileUpload(file);
